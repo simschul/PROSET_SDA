@@ -1,0 +1,23 @@
+for(i in 1:n) {
+  #mat <- matrix(ncol = n_industriesy, nrow = n_industriesx)
+  mat <- array(dim = c(n_industriesx, n_industriesy, n_emissions, n_fdcats))
+  for(m in 1:n_industriesx) {
+    for(n in 1:n_industriesy) {
+      for(o in 1:n_emissions) {
+        for(p in 1:n_fdcats) {
+          if(i == 1) logx <- log(year1[[1]][o,n] / year0[[1]][o,n]) # S
+          if(i == 2) logx <- log(year1[[2]][m,n] / year0[[2]][m,n]) # L
+          if(i == 3) logx <- log(year1[[3]][m,p] / year0[[3]][m,p]) # Y
+          mat[m,n,o,p] <- log_mean(x = year1[[1]][o,n] * year1[[2]][m,n] * year1[[3]][m,p],
+                                   y = year0[[1]][o,n] * year0[[2]][m,n] * year0[[3]][m,p]) *
+            logx
+          # mat[m,n] <- log_mean(x = year1[[1]][o,n] * year1[[2]][m,n] * year1[[3]][m,p], 
+          #                          y = year0[[1]][o,n] * year0[[2]][m,n] * year0[[3]][m,p]) * 
+          #   logx    
+          
+        }
+      }
+      
+    }
+  }
+  

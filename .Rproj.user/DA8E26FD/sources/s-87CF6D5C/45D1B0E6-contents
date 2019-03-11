@@ -21,12 +21,12 @@ library(my.utils)
 ############################################################################## #
 calculate_x <- function(Z, Y, va) {
   # check if mass balanced
-  if(!all.equal(apply(Z, 1, sum) + Y, apply(Z, 2, sum) + va)) {
+  if(!all.equal(apply(Z, 1, sum) + apply(Y, 1, sum), apply(Z, 2, sum) + va)) {
     stop("IO system is not mass balanced !!")
   }
   
   # calculate output
-  x <- apply(Z, 1, sum) + Y
+  x <- apply(Z, 1, sum) + apply(Y, 1, sum)
   return(x)
 }
 
@@ -105,7 +105,7 @@ mrio1[["Z"]] <- matrix(c(1,5,2,4,
                   6,4,3,1,
                   5,3,4,2), 
                 ncol = n_dim, nrow = n_dim, byrow = TRUE)
-mrio1[["Y"]] <- c(9,5,4,3)
+mrio1[["Y"]] <- matrix(c(9,5,4,3), ncol = 1)
 mrio1[["va"]] <- c(5,1,8,7)
 
 mrio1[["E"]] <- sample(x = 10:500, size = n_dim)
@@ -123,9 +123,9 @@ mrio2[["Z"]] <- matrix(c(1,4,1,2,
                          8,5,4,2,
                          6,5,4,4), 
                        n_dim, n_dim, byrow = TRUE)
-mrio2[["Y"]] <- c(11, 9, 4, 6)
+mrio2[["Y"]] <- matrix(c(11, 9, 4, 6), ncol = 1)
 
-x <- apply(mrio2$Z, 1, sum) + mrio2$Y
+x <- apply(mrio2$Z, 1, sum) + apply(mrio2$Y, 1, sum)
 mrio2[["va"]] <- x - apply(mrio2$Z, 2, sum) 
 
 apply(mrio2$Z, 2, sum) + mrio2$va

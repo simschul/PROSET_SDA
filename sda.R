@@ -53,7 +53,18 @@ log_mean <- function(x, y) {
   return((x - y) / (log(x) - log(y)))
 }
 
-sda_fun <- function(year0, year1, fun, type = "AMDI") {
+emission_calculator <- function(list, return = c("total", "detailed")) {
+  if(is.matrix(list[[3]])) list[[3]] <- as.numeric(list[[3]])
+  x <- as.numeric(list[[2]] %*% list[[3]])
+  if("total" %in% return) B <- list[[1]] %*% x
+  else if(return == "detailed") B <- list[[1]] %*% diag(x)
+  return(B)
+}
+
+sda_fun <- function(year0, year1, fun, 
+                    type = "AMDI", 
+                    return = c("total", "detailed"), 
+                    version = "forloop") {
   #if(type != "polar_average") stop("Only method 'polar average' implemented so far")
   if(length(year0) != length(year1)) stop("Both lists need to be of same legnth")
   if(!all.equal(names(year0), names(year1))) stop("both lists need same elements in same order")
@@ -83,77 +94,110 @@ sda_fun <- function(year0, year1, fun, type = "AMDI") {
       decomp[[i]] <- 0.5 * (fun(temp0) + fun(temp1)) 
     }
   } else if(type == "LMDI1") {
+    # indices
+    n_em <- dim(year0[[1]])[1]
+    n_ix <- dim(year0[[1]])[2]
+    n_iy <- dim(year0[[2]])[2]
+    n_fd <- dim(year0[[3]])[2]
     
-    l <- log_mean(emission_calculator(year1, "detailed"), emission_calculator(year0, "detailed")) 
-    print(l)
-    # delta S
-    temp <- 0
-    for(m in 1:4) {
-      for(n in 1:4) {
-        temp <- temp + (year1[[1]][1,n] * year1[[1]][m,n]) * log(year0[[1]][1,n])
+    
+    vars <- expand.grid("n_em" = 1:n_em, 
+                        "n_ix" = 1:n_ix, 
+                        "n_iy" = 1:n_iy, 
+                        "n_fd" = 1:n_fd)
+    
+    if(version == "forloop") {
+      for(i in 1:n) {
+        #mat <- matrix(ncol = n_industriesy, nrow = n_industriesx)
+        mat <- array(dim = c(n_ix, n_iy, n_em, n_fd))
+        for(m in 1:n_ix) {
+          for(n in 1:n_iy) {
+            for(o in 1:n_em) {
+              for(p in 1:n_fd) {
+                if(i == 1) logx <- log(year1[[1]][o,n] / year0[[1]][o,n]) # S
+                if(i == 2) logx <- log(year1[[2]][m,n] / year0[[2]][m,n]) # L
+                if(i == 3) logx <- log(year1[[3]][m,p] / year0[[3]][m,p]) # Y
+                mat[m,n,o,p] <- log_mean(x = year1[[1]][o,n] * year1[[2]][m,n] * year1[[3]][m,p],
+                                         y = year0[[1]][o,n] * year0[[2]][m,n] * year0[[3]][m,p]) *
+                  logx
+                # mat[m,n] <- log_mean(x = year1[[1]][o,n] * year1[[2]][m,n] * year1[[3]][m,p], 
+                #                          y = year0[[1]][o,n] * year0[[2]][m,n] * year0[[3]][m,p]) * 
+                #   logx    
+                
+              }
+            }
+            
+          }
+          
+        }
+        decomp[[i]] <- mat 
+        
       }
+      
     }
-    decomp[[1]] <- temp
-    
-    # delta L
-    temp <- 0
-    for(m in 1:4) {
-      for(n in 1:4) {
-        temp <- temp + l[1,n] * log(year0[[2]][m,n])
-      }
+    else if(version == "faster") {
+      for(i in 1:n) {
+        #mat <- matrix(ncol = n_industriesy, nrow = n_industriesx)
+        mat <- array(dim = c(n_ix, n_iy, n_em, n_fd))
+        for(j in 1:nrow(vars)) {
+          m <- vars[j, "n_ix"]
+          n <- vars[j, "n_iy"]
+          o <- vars[j, "n_em"]
+          p <- vars[j, "n_fd"]
+          if(i == 1) logx <- log(year1[[1]][o,n] / year0[[1]][o,n]) # S
+          if(i == 2) logx <- log(year1[[2]][m,n] / year0[[2]][m,n]) # L
+          if(i == 3) logx <- log(year1[[3]][m,p] / year0[[3]][m,p]) # Y
+          mat[m,n,o,p] <- log_mean(x = year1[[1]][o,n] * year1[[2]][m,n] * year1[[3]][m,p],
+                                   y = year0[[1]][o,n] * year0[[2]][m,n] * year0[[3]][m,p]) *
+            logx
+        }
+        decomp[[i]] <- mat 
+        
+      }  
     }
-    decomp[[2]] <- temp
     
-    # delta Y
-    temp <- 0
-    for(m in 1:4) {
-      for(n in 1:4) {
-        temp <- temp + l[1,n] * log(year0[[3]][m,1])
-      }
-    }
-    decomp[[3]] <- temp
-    
-    # 
-    # for(i in 1:n) {
-    #   y0 <- as.numeric(year0[[i]])
-    #   y1 <- as.numeric(year1[[i]])
-    #   dy <- y1 - y0
-    #   temp <- 0
-    #   
-    #   for(j in 1:length(y0)){
-    #     temp <- temp + log(y1[j] / y0[j])
-    #     #temp <- temp +  (fun(year1) - fun(year0) /  log()) * log(y1[j] / y0[j])
-    #   }
-    #   decomp[[i]] <- temp * l
-    #   
-    #   # decomp[[i]] <- as.numeric(log_mean(fun(year1), fun(year0))) * (log(year1[[i]] / year0[[i]]))
-    # 
-    #   }
   }
+  if("total" %in% return) {
+    decomp <- lapply(decomp, function(x) x %>% unlist %>% sum)
+  } 
   return(decomp)
 }
-x1$Y <- matrix(x1$Y, ncol = 1, nrow = 4)
-x2$Y <- matrix(x2$Y, ncol = 1, nrow = 4)
 
-test <- sda_fun(x1, x2, emission_calculator)
-test2 <- sda_fun(x1, x2, emission_calculator, type = "LMDI1")
-
-
-
-
-lapply(test2, sum) %>% unlist %>% sum
-b2 - b1
-
-emission_calculator <- function(list, return = c("total", "detailed")) {
-  if(is.matrix(list[[3]])) list[[3]] <- as.numeric(list[[3]])
-  x <- as.numeric(list[[2]] %*% list[[3]])
-  if("total" %in% return) B <- list[[1]] %*% x
-  else if(return == "detailed") B <- list[[1]] %*% diag(x)
-  return(B)
-}
-  
 x1 <- io_table$year0[c("S", "L", "Y")]
 x2 <- io_table$year1[c("S", "L", "Y")]
+x1$Y <- matrix(c(x1$Y, 4,7,4,2), ncol = 2, nrow = 4)
+x2$Y <- matrix(c(x2$Y, 6,7,5,4), ncol = 2, nrow = 4)
+
+test <- sda_fun(x1, x2, function(x) emission_calculator(x, return = "detailed"), return = "detailed")
+test2 <- sda_fun(x1, x2, emission_calculator, type = "LMDI1")
+test3 <- sda_fun(x1, x2, emission_calculator, type = "LMDI1", return = "detailed")
+test4 <- sda_fun(x1, x2, emission_calculator, type = "LMDI1", return = "detailed")
+
+system.time(sda_fun(x1, x2, emission_calculator, type = "LMDI1", return = "detailed"))
+
+
+lapply(test4, function(x) x %>% unlist %>% sum)
+test3$S %>% apply(., 2, sum)
+test3$L %>% apply(., 2, sum)
+test3$Y %>% apply(., 1, sum)
+
+test4$S %>% apply(., c(2,3), sum)
+test4$L %>% apply(., 2, sum)
+test4$Y %>% apply(., c(1,4), sum)
+
+
+
+
+x2$Y - x1$Y
+
+test
+test2
+
+lapply(test2, sum) %>% unlist %>% sum
+lapply(test, sum) %>% unlist %>% sum
+b2 - b1
+
+
 
 b1 <- emission_calculator(x1) %>% sum
 b2 <- emission_calculator(x2) %>% sum
