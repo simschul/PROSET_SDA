@@ -5,16 +5,16 @@
     "dirty" : false,
     "encoding" : "UTF-8",
     "folds" : "",
-    "hash" : "3344831795",
+    "hash" : "927209640",
     "id" : "1D771578",
-    "lastKnownWriteTime" : 1552317882,
-    "last_content_update" : 1552317882792,
+    "lastKnownWriteTime" : 1552915622,
+    "last_content_update" : 1552915622178,
     "path" : "~/Documents/PhD_PROSET/code/R/SDA/SDA/./sda.R",
     "project_path" : "./sda.R",
     "properties" : {
-        "cursorPosition" : "219,0",
+        "cursorPosition" : "182,0",
         "docOutlineVisible" : "1",
-        "scrollLine" : "199"
+        "scrollLine" : "180"
     },
     "relative_order" : 2,
     "source_on_save" : false,

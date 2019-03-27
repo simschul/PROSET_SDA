@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1552993502125.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2684938875",
+    "id" : "867C902C",
+    "lastKnownWriteTime" : 1553007294,
+    "last_content_update" : 1553007294963,
+    "path" : "~/Documents/PhD_PROSET/code/R/SDA/SDA/./decompose_L.R",
+    "project_path" : "./decompose_L.R",
+    "properties" : {
+        "cursorPosition" : "56,0",
+        "scrollLine" : "44"
+    },
+    "relative_order" : 6,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

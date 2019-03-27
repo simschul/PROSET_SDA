@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1552996261803.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1911483385",
+    "id" : "81DAD21",
+    "lastKnownWriteTime" : 1549032494,
+    "last_content_update" : 1549032494,
+    "path" : "~/R/x86_64-pc-linux-gnu-library/3.4/RcppEigen/include/Eigen/src/Core/CoreEvaluators.h",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "959,7",
+        "scrollLine" : "0"
+    },
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "h"
+}

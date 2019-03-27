@@ -1,0 +1,86 @@
+# function ---------------------------------------------------------------
+
+sda_fun <- function(year0, year1, fun, 
+                    type = "AMDI", 
+                    return = c("total", "detailed"), 
+                    version = "forloop") {
+  if(length(year0) != length(year1)) stop("Both lists need to be of same legnth")
+  if(!all.equal(names(year0), names(year1))) stop("both lists need same elements in same order")
+  
+  n <- length(year0)
+  delta <- lapply(1:n, function(x) {
+    return(year1[[x]] - year0[[x]])
+  })
+  
+  decomp <- create_named_list(names(year0))
+  
+  
+  # indices
+  n_em <- dim(year0[[1]])[1]
+  n_ix <- dim(year0[[2]])[1]
+  n_iy <- dim(year0[[2]])[2]
+  n_fd <- dim(year0[[3]])[2]
+  
+  
+  vars <- expand.grid("n_em" = 1:n_em, 
+                      "n_ix" = 1:n_ix, 
+                      "n_iy" = 1:n_iy, 
+                      "n_fd" = 1:n_fd)
+  
+  
+  for(i in 1:n) {
+    #mat <- matrix(ncol = n_industriesy, nrow = n_industriesx)
+    mat <- array(dim = c(n_ix, n_iy, n_em, n_fd))
+    for(m in 1:n_ix) {
+      for(n in 1:n_iy) {
+        for(o in 1:n_em) {
+          for(p in 1:n_fd) {
+            if(i == 1) logx <- log(year1[[1]][o,n] / year0[[1]][o,n]) # S
+            if(i == 2) logx <- log(year1[[2]][m,n] / year0[[2]][m,n]) # L
+            if(i == 3) logx <- log(year1[[3]][m,p] / year0[[3]][m,p]) # Y
+            mat[m,n,o,p] <- log_mean(x = year1[[1]][o,n] * year1[[2]][m,n] * year1[[3]][m,p],
+                                     y = year0[[1]][o,n] * year0[[2]][m,n] * year0[[3]][m,p]) *
+              logx
+            
+          }
+        }
+        
+      }
+      
+    }
+    decomp[[i]] <- mat 
+    
+  }
+  if("total" %in% return) {
+    decomp <- lapply(decomp, function(x) x %>% unlist %>% sum)
+  } 
+  return(decomp)
+}
+
+
+
+# apply function --------------------------------------------------------------
+
+x1 <- io_table$year0[c("S", "L", "Y")]
+x2 <- io_table$year1[c("S", "L", "Y")]
+x1$Y <- matrix(c(x1$Y, 4,7,4,2), ncol = 2, nrow = 4)
+x2$Y <- matrix(c(x2$Y, 6,7,5,4), ncol = 2, nrow = 4)
+
+dims <- list("S" = c("o", "n"), 
+             "L" = c("n", "m"), 
+             "Y" = c("m", "p"))
+
+test2 <- sda_fun(x1, x2, type = "LMDI1")
+test3 <- sda_fun(x1, x2, emission_calculator, type = "LMDI1", return = "detailed")
+
+
+
+
+
+
+
+
+
+
+
+
