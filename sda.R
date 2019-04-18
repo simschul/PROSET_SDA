@@ -31,30 +31,13 @@ io_table <- readRDS(file.path(path2temp_results, "IO_example.RData"))
 # 1. Structural decomposition analysis according to dietzenbacher 1998 ---------
 
 # _a) functions ----------------------------------------------------------------
-log_mean <- function(x, y) {
-  return((x - y) / (log(x) - log(y)))
-}
-
-emission_calculator <- function(list, return = c("total", "detailed")) {
-  if(is.matrix(list[[3]])) list[[3]] <- apply(list[[3]], 1, sum) %>% as.numeric
-  x <- as.numeric(list[[2]] %*% list[[3]])
-  if("total" %in% return) B <- list[[1]] %*% x
-  else if(return == "detailed") B <- list[[1]] %*% diag(x)
-  return(B)
-}
-
-emission_calculator2 <- function(list, return = c("total", "detailed")) {
-  Y <- list[[3]] * (list[[4]] %*% list[[5]])
-  B <- emission_calculator(list = c(list[[1]], list[[2]], Y))
-  return(B)
-}
 
 
 sda_fun <- function(year0, year1, fun, 
                     type = "AMDI", 
                     return = c("total", "detailed"), 
                     version = "forloop") {
-  #if(type != "polar_average") stop("Only method 'polar average' implemented so far")
+  
   if(length(year0) != length(year1)) stop("Both lists need to be of same legnth")
   if(!all.equal(names(year0), names(year1))) stop("both lists need same elements in same order")
   
@@ -162,7 +145,6 @@ test <- sda_fun(x1, x2, function(x) emission_calculator(x, return = "detailed"),
 test2 <- sda_fun(x1, x2, emission_calculator, type = "LMDI1")
 test3 <- sda_fun(x1, x2, emission_calculator, type = "LMDI1", return = "detailed")
 
-system.time(sda_fun(x1, x2, emission_calculator, type = "LMDI1", return = "detailed"))
 
 
 lapply(test, function(x) x %>% unlist %>% sum)
@@ -284,8 +266,8 @@ sda_fun <- function(year0, year1, fun,
 
 # _b) Applying function --------------------------------------------------------
 
-x1 <- c(io_table$year0[c("S", "L")], io_table$year0$Y %>% decompose_final_demand)
-x2 <- c(io_table$year1[c("S", "L")], io_table$year1$Y %>% decompose_final_demand)
+x1 <- c(io_table$year0[c("S", "L")], cbind(io_table$year0$Y, c(5,3,1,0)) %>% decompose_final_demand)
+x2 <- c(io_table$year1[c("S", "L")], cbind(io_table$year1$Y, c(6,3,4,2)) %>% decompose_final_demand)
 
 result_simple <- sda_fun(x1, x2, fun = emission_calculator2, return = "total")
 result <- sda_fun(x1, x2, type = "LMDI1", return = "total")
@@ -309,5 +291,85 @@ result %>% unlist %>% sum
 
 emission_calculator2(x1)
 emission_calculator2(x2)
+
+
+
+
+
+# 3. Structural Path Decomposition - An easy examply---------------------------------------------
+
+sda_fun <- function(year0, year1, fun, 
+                    n.layers,
+                    type = "AMDI", 
+                    return = c("total", "detailed"), 
+                    version = "forloop") {
+  # begin test
+  year0 <- io_table$year0[c("S", "L", "Y")]
+  year1 <- io_table$year1[c("S", "L", "Y")]
+  n.layers <- 4
+  
+  # end test
+  
+  
+  if(length(year0) != length(year1)) stop("Both lists need to be of same legnth")
+  if(!all.equal(names(year0), names(year1))) stop("both lists need same elements in same order")
+  n.comp <- length(year0)
+  # calculate difference for each argument between year 0 and year 1
+  delta <- lapply(1:n.comp, function(x) {
+    return(year1[[x]] - year0[[x]])
+  })
+  
+  if(type == "AMDI") {
+    temp0 <- create_named_list(names(year0))
+    temp1 <- create_named_list(names(year0))
+    for(i in 1:n.comp) {
+      # all components on the left hand side from year 0, right: year 1
+      temp0[1:i] <- year0[1:i]
+      temp0[i:n.comp] <- year1[i:n.comp]
+      temp0[[i]] <- delta[[i]]
+      # the other way round
+      temp1[1:i] <- year1[1:i]
+      temp1[i:n.comp] <- year0[i:n.comp]
+      temp1[[i]] <- delta[[i]]
+      # take mean of the two
+      decomp[[i]] <- 0.5 * (fun(temp0) + fun(temp1)) 
+    }
+  } else if(type == "LMDI1") {
+     
+    L_series0 <- leontief_series_expansion(year0[["A"]], n = n.layers)
+    L_series1 <- leontief_series_expansion(year1[["A"]], n = n.layers)
+    
+    for(ilayer in 1:n.layers) {
+      if(ilayer == 1) {
+        # direct emissions
+        
+        
+      }
+      
+      
+      
+      
+        
+      
+     
+  } # ilayer
+  
+}
+if("total" %in% return) {
+  decomp <- lapply(decomp, function(x) x %>% unlist %>% sum)
+} 
+return(decomp)
+}
+
+
+
+
+
+
+
+
+
+
+
 
 # THE END ---------------------------------------------------------------------

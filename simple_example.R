@@ -19,63 +19,8 @@ library(my.utils)
 ############################################################################## # 
 ##### functions ############################################################
 ############################################################################## #
-calculate_x <- function(Z, Y, va) {
-  # check if mass balanced
-  if(!all.equal(apply(Z, 1, sum) + apply(Y, 1, sum), apply(Z, 2, sum) + va)) {
-    stop("IO system is not mass balanced !!")
-  }
-  
-  # calculate output
-  x <- apply(Z, 1, sum) + apply(Y, 1, sum)
-  return(x)
-}
 
-calculate_A <- function(Z, x) {
-  # calculate A-matrix
-  x_hat <- diag(1/x)
-  A <- Z %*% x_hat
-  return(A)
-}
-
-calculate_S <- function(E, x) {
-  # calculate Stressor matrix
-  S <- E %*% diag(1/x)
-  return(S)
-}
-
-IO_creator <- function(Z, Y, va, E) {
-  x <- calculate_x(Z, Y, va)
-  A <- calculate_A(Z, x)
-  S <- calculate_S(E, x)
-  # calculate Leontief inverse
-  I_mat <- diag(rep(1, nrow(A)))
-  L <- solve(I_mat - A)
-  return(list("A" = A, "L" = L, "S" = S))
-}
-
-IO_calculator <- function(S, L, Y) {
-  
-  # calculate emissions
-  
-  x <- as.numeric(L %*% Y)
-  B <- S %*% diag(x)
-  return(B)
-  # return(list("Y" = Y, 
-  #             "x" = x,
-  #             "A" = A, 
-  #             "L" = L, 
-  #             "S" = S, 
-  #             "B" = B))
-}
-
-mrio1[["x"]] <- calculate_x(mrio1$Z, mrio1$Y, mrio1$va)
-mrio1[["A"]] <- calculate_A(mrio1$Z, mrio1$x)
-mrio1[["S"]] <- calculate_S(mrio1$E, mrio1$x)
-res <- IO_calculator(A = mrio1$A, 
-                     S = mrio1$S, 
-                     Y = mrio1$Y)
-mrio1$S %*% diag(x)
-
+source("./functions.R")
 
 ############################################################################## # 
 ##### settings #################################################################
