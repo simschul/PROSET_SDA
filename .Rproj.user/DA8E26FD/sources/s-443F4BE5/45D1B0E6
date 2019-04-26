@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1551354842946.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "45D1B0E6",
+    "lastKnownWriteTime" : 1555490128,
+    "last_content_update" : 1555490128939,
+    "path" : "~/Documents/PhD_PROSET/code/R/SDA/SDA/./simple_example.R",
+    "project_path" : "./simple_example.R",
+    "properties" : {
+        "cursorPosition" : "22,21",
+        "docOutlineVisible" : "1",
+        "scrollLine" : "0"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

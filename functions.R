@@ -42,13 +42,21 @@ IO_creator <- function(Z, Y, va, E) {
   return(list("A" = A, "L" = L, "S" = S))
 }
 
-IO_calculator <- function(S, L, Y) {
-  # calculate emissions
+IO_calculator <- function(S, L, Y, B, d, f, detailed = TRUE) {
+  if(missing(Y)) Y <- (B %*% d) * as.numeric(f)
   x <- as.numeric(L %*% Y)
-  B <- S %*% diag(x)
+  if(detailed) B <- S %*% diag(x)
+  else B <- S %*% x
   return(B)
 }
 
+create_random_IOtable <- function(n.industries, n.emissions, n.fdcats, A = FALSE) {
+  x0 <- list("S" = matrix(runif(n.industries*n.emissions), n.emissions, n.industries), 
+             "L" = matrix(runif(n.industries^2), n.industries, n.industries), 
+             "Y" = matrix(runif(n.industries * n.fdcats), n.industries, n.fdcats))
+  if(A) x0[["A"]] <- matrix(runif(n.industries^2), n.industries, n.industries)
+  return(x0)
+}
 
 leontief_series_expansion <- function(A_mat, n) {
   list <- vector(mode = "list", length = n)
@@ -58,6 +66,144 @@ leontief_series_expansion <- function(A_mat, n) {
   }
   return(list)
 }
+
+io.table <- io_table$year0[c("S", "A", "Y")]
+io.table <- create_random_IOtable(500, 1, 1)
+names(io.table)[2] <- "A"
+
+spa <- function(io.table, n.layers) {
+  A_mat <- io.table[["A"]]
+  io.table[["A"]] <- NULL
+  gc()
+  paths_list <- vector("list", n.layers)
+  
+  ilayer <- 1
+  for(ilayer in 1:n.layers) {
+    dims <- get_indices(io.table)
+    cols <- paste0("Var", 1:length(dims)) 
+    paths_list[[ilayer]] <- lapply(dims, function(x) 1:x) %>% 
+      expand.grid %>%
+      as.data.table 
+    
+    paths_list[[ilayer]][, "indices" := paste0(Var1, Var2, Var3)]
+    paths_list[[ilayer]][, (cols) := NULL] 
+    
+    # option 1
+    system.time(paths_list[[ilayer]][, c("value") := extract_selected(io.table, 
+                                                                      c(Var1, Var2, Var3, Var4)) %>% 
+                                       prod, 
+         by = 1:nrow(paths_list[[ilayer]]), with = TRUE])
+    # option 2
+    system.time(paths_list[[ilayer]][, c("value") := extract_selected_1L(io.table, 
+                                                                      indices) %>% 
+                                       prod, 
+                                     by = 1:nrow(paths_list[[ilayer]])])
+    
+    
+    # option 3
+    system.time(test <- io.table$S %*% io.table$A %*% diag(io.table$Y %>% as.numeric))
+    test %>% sum
+    paths_list[[2]][, sum(value)]
+    
+    crossprod(io.table$S, io.table$A)
+    
+    # option 4
+
+    
+    # -----
+    gc()
+    io.table <- append(io.table, list(io_table$year0[["A"]]), ilayer)
+    names(io.table)[ilayer + 1] <- paste0("A", ilayer)
+  } # ilayer
+  return(paths_list)
+}
+
+
+io.table <- io_table$year0[c("S", "A", "Y")]
+spa <- function(io.table, n.layers) {
+  A_mat <- io.table[["A"]]
+  io.table[["A"]] <- NULL
+  gc()
+  paths_list <- vector("list", n.layers)
+  
+  fp_fun <- function(indices, IO.list) {
+    y0 <- extract_selected(IO.list, indices) %>% prod  
+    return(y0)
+  }
+  #ilayer <- 1
+  for(ilayer in 1:n.layers) {
+    dims <- get_indices(io.table)
+    vars <- lapply(dims, function(x) 1:x) %>% 
+      expand.grid 
+    vars <- lapply(1:nrow(vars), function(x) vars[x,] %>% as.numeric)
+    tmp <- lapply(X = vars,  FUN = function(x) {
+      fp_fun(indices = x, IO.list = io.table)
+    })
+    paths_list[[ilayer]] <- array(dim = dims)
+    for(i in 1:length(tmp)) {
+      paths_list[[ilayer]][matrix(vars[[i]], ncol = length(vars[[i]]))] <- tmp[[i]]
+    }
+    rm(tmp, i)
+    gc()
+    io.table <- append(io.table, list(io_table$year0[["A"]]), ilayer)
+    names(io.table)[ilayer + 1] <- paste0("A", ilayer)
+  } # ilayer
+  return(paths_list)
+}
+
+
+io.table <- io_table$year0[c("S", "A", "Y")]
+spa.original <- function(io.table, n.layers) {
+  A_mat <- io.table[["A"]]
+  io.table[["A"]] <- NULL
+  gc()
+  paths_list <- vector("list", n.layers)
+  
+  fp_fun <- function(indices, IO.list) {
+    y0 <- extract_selected(IO.list, indices) %>% prod  
+    return(y0)
+  }
+  ilayer <- 1
+  for(ilayer in 1:n.layers) {
+    dims <- get_indices(io.table)
+    vars <- lapply(dims, function(x) 1:x) %>% 
+      expand.grid 
+    vars <- lapply(1:nrow(vars), function(x) vars[x,] %>% as.numeric)
+    tmp <- lapply(X = vars,  FUN = function(x) {
+      fp_fun(indices = x, IO.list = io.table)
+    })
+    paths_list[[ilayer]] <- array(dim = dims)
+    for(i in 1:length(tmp)) {
+      paths_list[[ilayer]][matrix(vars[[i]], ncol = length(vars[[i]]))] <- tmp[[i]]
+    }
+    rm(tmp, i)
+    gc()
+    io.table <- append(io.table, list(io_table$year0[["A"]]), ilayer)
+    names(io.table)[ilayer + 1] <- paste0("A", ilayer)
+  } # ilayer
+  return(paths_list)
+}
+
+
+x1 <- create_random_IOtable(500, 1, 1, A = TRUE)
+
+system.time(test <- spa(io.table = x1, n.layers = 4))
+object.size(test)
+
+
+
+data <- lapply(test, function(x) {
+  apply(x, c(2,3), sum) %>% as.numeric
+}) %>% as.data.table %>% t %>% 
+  as.data.table %>% 
+  .[, "layer" := 1:nrow(.)] %>% 
+  melt(id.vars = "layer", variable.name = "industry")
+
+ggplot(data, aes(x = layer, y = value, col = industry)) + 
+  geom_line()
+
+
+
 
 
 # 2. Sectoral Footprint Functions ----------------------------------------------
@@ -165,16 +311,20 @@ emission_calculator2 <- function(list, return = c("total", "detailed")) {
   return(B)
 }
 
+#FD_matrix <- matrix(runif(12), 4,3)
 decompose_final_demand <- function(FD_matrix) {
   # TODO: all components should be of type matrix
   f_vec <- apply(FD_matrix, 1, sum) # FD by industry
   y_vec <- apply(FD_matrix, 2, sum) # FD by category
-  f_tot <- sum(f_vec) # Total FD
-  d_vec <- y_vec / f_tot # proportion of each category
+  f_tot <- matrix(sum(f_vec), 1,1) # Total FD
+  d_vec <- matrix(y_vec / as.numeric(f_tot)) # proportion of each category
   B_mat <- FD_matrix %*% diag(1 / y_vec)
-  return(list("total" = f_tot, 
-              "B_mat" = B_mat, 
-              "d_vec" = d_vec))
+  # return(list("B_mat" = B_mat, 
+  #             "d_vec" = d_vec, 
+  #            "total" = f_tot))
+  return(list("B" = B_mat, 
+              "d" = d_vec, 
+              "f" = f_tot))
 }
 
 get_indices <- function(list) {
@@ -197,16 +347,51 @@ extract_selected <- function(list, indices) {
 }
 
 
-.SDA.lmdi <- function(year0, year1, zero.handling = FALSE) {
+extract_selected_1L <- function(list, indices) {
+  indices <- as.numeric(strsplit(as.character(indices),"")[[1]])
+  extract_selected(list, indices)
+}
+
+
+delta_IO <- function(x0, x1) {
+  lapply(1:length(x0), function(x) {
+  return(x1[[x]] - x0[[x]])
+}) %>% setNames(names(x0))
+}
+
+
+mat2dt <- function(mat, exclude.zeros = FALSE, exclude.na = FALSE) {
+  #mat <- matrix(runif(12), 4, 3)
+  dt <- mat %>% 
+    as.data.table 
+  dt <- suppressWarnings(melt(dt, variable.name = "col")) 
+  dt[, "col" := substring(col, 2) %>% as.numeric] 
+  dt[, "row" := 1:nrow(mat)]
+  if(exclude.zeros) dt <- dt[value != 0]
+  if(exclude.na) dt <- dt[!is.na(value)]
+  setcolorder(dt, neworder = c("row", "col", "value"))
+  return(dt[])
+}
+
+.SDA.lmdi <- function(year0, year1, 
+                      zero.handling = FALSE, aggregate = TRUE, 
+                      parallel = FALSE, n.cores) {
+  
+  # year0 <- io_table$year0[c("S", "L", "Y")]
+  # year1 <- io_table$year1[c("S", "L", "Y")]
+  # zero.handling <- FALSE
+  # aggregate <- TRUE
+  # parallel <- FALSE
+   
   n.comp <- length(year0)
   indices <- get_indices(year0)
   vars <- lapply(indices, function(x) 1:x) %>% 
-    expand.grid
+    expand.grid %>% 
+    as.matrix
   decomp <- create_named_list(names(year0)) %>%
     lapply(., function(x) array(dim = indices))
-  
-  
-  for(j in 1:nrow(vars)) {
+  if(!parallel) {
+    for(j in 1:nrow(vars)) {
     inds <- vars[j,] %>% as.numeric # combinations of coefficients
     y0 <- extract_selected(year0, inds) %>% prod
     y1 <- extract_selected(year1, inds) %>% prod
@@ -239,7 +424,7 @@ extract_selected <- function(list, indices) {
       }
       
     } else {
-      # neither y0, y1, x0, x1 are zero
+      # neither y0, y1, x0, x1 are zero OR zero.handling == FALSE
       y_log_mean <- log_mean(x = y1, 
                              y = y0)
       for(i in 1:n.comp) {
@@ -248,16 +433,137 @@ extract_selected <- function(list, indices) {
       }  
     }
   }
-  
-  decomp <- lapply(1:n.comp, function(x) {
-    decomp[[x]] %>% apply(., c(x, x+1), sum)
-  }) %>% setNames(names(year0))
+    
+  } else {
+    vars <- lapply(1:nrow(vars), function(x) vars[x,] %>% as.numeric)
+    .lmdi.fun <- function(j) {
+      inds <- j
+      y0 <- extract_selected(year0, inds) %>% prod
+      y1 <- extract_selected(year1, inds) %>% prod
+      y_log_mean <- log_mean(x = y1, 
+                             y = y0)
+      list <- create_named_list(names(year0)) 
+      
+      
+      for(i in 1:n.comp) {
+        x_log <- log(year1[[i]][inds[i], inds[i+1]] / year0[[i]][inds[i], inds[i+1]])
+        list[[i]] <- y_log_mean * x_log
+      }
+      return(list)
+    }
+    
+    tmp <- lapply(X = vars,  FUN = .lmdi.fun)
+    #tmp <- pbmclapply(mc.cores = n.cores, X = vars,  FUN = .lmdi.fun)
+    # reshape to array
+    for(i in 1:length(tmp)) {
+      for(ii in 1:length(decomp)) {
+        decomp[[ii]][matrix(vars[[i]], ncol = length(vars[[i]]))] <- tmp[[i]][[ii]]  
+      }
+    }
+    rm(tmp)
+    gc()
+  }
+  if(aggregate) {
+    decomp <- lapply(1:n.comp, function(x) {
+      decomp[[x]] %>% apply(., c(x, x+1), sum)
+    }) %>% setNames(names(year0))
+  }
   return(decomp)
 }
 
+n_ind <- 300
+n_em <- 1
+n_fd <- 1
+
+x0 <- create_random_IOtable(n_ind, n_em, n_fd)
+x1 <- create_random_IOtable(n_ind, n_em, n_fd)
+
+system.time(res1 <- .SDA.lmdi(x0, x1, parallel = FALSE))
+system.time(res2 <- .SDA.lmdi(x0, x1, parallel = TRUE, n.cores = 1))
+
+all.equal(res1, res2)
+ref
+
+
+# begin test
+test1 <- lapply(vars, FUN = function(j) {
+  #inds <- vars[j,] %>% as.numeric # combinations of coefficients
+  inds <- j
+  y0 <- extract_selected(year0, inds) %>% prod
+  y1 <- extract_selected(year1, inds) %>% prod
+  
+  
+    y_log_mean <- log_mean(x = y1, 
+                           y = y0)
+    decomp <- create_named_list(names(year0)) 
+    for(i in 1:n.comp) {
+      x_log <- log(year1[[i]][inds[i], inds[i+1]] / year0[[i]][inds[i], inds[i+1]])
+      decomp[[i]] <- y_log_mean * x_log
+    }
+    return(decomp)
+})
 
 
 
+
+decomp2 <- create_named_list(names(year0)) %>%
+  lapply(., function(x) array(dim = indices))
+
+test1[[1]][[2]] # goes to vars[[1]]
+
+vars <- lapply(1:nrow(vars), function(x) vars[x,] %>% as.numeric)
+
+
+
+
+
+
+
+
+
+all.equal(decomp, decomp2)
+ref
+
+
+
+vars[[1]]
+result <- create_named_list(names(year0)) %>%
+  lapply(., function(x) array(dim = indices))
+
+
+    #[matrix(inds, ncol = length(inds))]
+
+cl <- makeForkCluster(7)
+doParallel::registerDoParallel(cl)
+
+acomb <- function(...) abind::abind(..., along = 4)
+guad <- foreach(r=1:3, .combine='acomb', .multicombine=TRUE) %dopar% {
+  x <- matrix(rnorm(16), 2)  # compute x somehow
+  x  # return x as the task result
+}
+dim(guad)
+
+decomp <- array(dim = c(indices))
+vars <- lapply(c(indices), function(x) 1:x) %>% 
+  expand.grid %>%
+  as.matrix
+vars <- lapply(1:nrow(vars), function(x) vars[x,] %>% as.numeric)
+
+foreach::foreach(j = 1:length(vars)) %dopar% {
+  #inds <- vars[j,] %>% as.numeric # combinations of coefficients
+  inds <- vars[[j]]
+  y0 <- extract_selected(year0, inds) %>% prod
+  y1 <- extract_selected(year1, inds) %>% prod
+  # neither y0, y1, x0, x1 are zero OR zero.handling == FALSE
+  y_log_mean <- log_mean(x = y1, 
+                         y = y0)
+  for(i in 1:n.comp) {
+    x_log <- log(year1[[i]][inds[i], inds[i+1]] / year0[[i]][inds[i], inds[i+1]])
+    decomp[[i]][matrix(inds, ncol = length(inds))] <- y_log_mean * x_log
+  }  
+  
+}
+stopCluster(cl)  
 
 
 

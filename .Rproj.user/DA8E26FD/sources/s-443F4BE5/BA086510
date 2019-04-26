@@ -1,0 +1,24 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1555487555898.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "BA086510",
+    "lastKnownWriteTime" : 1556285980,
+    "last_content_update" : 1556285980316,
+    "path" : "~/Documents/PhD_PROSET/code/R/SDA/SDA/functions.R",
+    "project_path" : "functions.R",
+    "properties" : {
+        "cursorPosition" : "375,0",
+        "docOutlineVisible" : "1",
+        "scrollLine" : "373",
+        "tempName" : "Untitled3"
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -298,76 +298,87 @@ emission_calculator2(x2)
 
 # 3. Structural Path Decomposition - An easy examply---------------------------------------------
 
-sda_fun <- function(year0, year1, fun, 
-                    n.layers,
-                    type = "AMDI", 
-                    return = c("total", "detailed"), 
-                    version = "forloop") {
+spd <- function(year0, year1, 
+                n.layers, cut = NULL, ...) {
   # begin test
-  year0 <- io_table$year0[c("S", "L", "Y")]
-  year1 <- io_table$year1[c("S", "L", "Y")]
-  n.layers <- 4
-  
+  # year0 <- io_table$year0[c("S", "L", "Y", "A")]
+  #  year1 <- io_table$year1[c("S", "L", "Y", "A")]
+  #year0 <- x1
+  #year1 <- x2
+  # n.layers <- 3
+
   # end test
-  
-  
-  if(length(year0) != length(year1)) stop("Both lists need to be of same legnth")
+  if(length(year0) != length(year1)) stop("Both lists need to be of same length")
   if(!all.equal(names(year0), names(year1))) stop("both lists need same elements in same order")
+  
+  
   n.comp <- length(year0)
-  # calculate difference for each argument between year 0 and year 1
-  delta <- lapply(1:n.comp, function(x) {
-    return(year1[[x]] - year0[[x]])
-  })
+  decomp <- vector("list", length = n.layers)
+  # extract all but L and A matrices
+  x0 <- year0[!(names(year0) %in% c("L", "A"))]
+  x1 <- year1[!(names(year1) %in% c("L", "A"))]
   
-  if(type == "AMDI") {
-    temp0 <- create_named_list(names(year0))
-    temp1 <- create_named_list(names(year0))
-    for(i in 1:n.comp) {
-      # all components on the left hand side from year 0, right: year 1
-      temp0[1:i] <- year0[1:i]
-      temp0[i:n.comp] <- year1[i:n.comp]
-      temp0[[i]] <- delta[[i]]
-      # the other way round
-      temp1[1:i] <- year1[1:i]
-      temp1[i:n.comp] <- year0[i:n.comp]
-      temp1[[i]] <- delta[[i]]
-      # take mean of the two
-      decomp[[i]] <- 0.5 * (fun(temp0) + fun(temp1)) 
-    }
-  } else if(type == "LMDI1") {
-     
-    L_series0 <- leontief_series_expansion(year0[["A"]], n = n.layers)
-    L_series1 <- leontief_series_expansion(year1[["A"]], n = n.layers)
-    
-    for(ilayer in 1:n.layers) {
-      if(ilayer == 1) {
-        # direct emissions
-        
-        
-      }
-      
-      
-      
-      
-        
-      
-     
+  for(ilayer in 1:n.layers) {
+    decomp[[ilayer]] <- .SDA.lmdi(x0, x1, aggregate = FALSE, ...)
+   # decomp[[ilayer]]$B[which(decomp[[ilayer]]$B < 0.01)] <- NA
+    x0 <- append(x0, list(year0[["A"]]), ilayer)
+    x1 <- append(x1, list(year1[["A"]]), ilayer)
+    names(x0)[ilayer + 1] <- paste0("A", ilayer)
+    names(x1)[ilayer + 1] <- paste0("A", ilayer)
   } # ilayer
+
+  decomp <- lapply(decomp, function(y) {
+    lapply(y, function(x) {
+      res <- as.data.table(x)
+      if(!is.null(cut)) res <- res[abs(value) > cut]
+      return(res)
+    }) %>% rbindlist(idcol = "differential")  
+  }) %>% rbindlist(., idcol = "order", fill = TRUE) 
   
+  decomp[, "rank" := frankv(abs(value), na.last = TRUE, order = -1)]
+  setorder(decomp, rank)
+  setcolorder(decomp, c("rank", "value", "order", "differential"))
+  return(decomp[])
 }
-if("total" %in% return) {
-  decomp <- lapply(decomp, function(x) x %>% unlist %>% sum)
-} 
-return(decomp)
-}
+
+x1 <- c(io_table$year0[c("S", "L", "A")], cbind(io_table$year0$Y, c(5,3,1,0)) %>% decompose_final_demand)
+x2 <- c(io_table$year1[c("S", "L", "A")], cbind(io_table$year1$Y, c(6,3,4,2)) %>% decompose_final_demand)
+delta_IO(x1, x2)
+
+
+test <- spd(x1, x2, 4, cut = abs(as.numeric(0.0001 * delta_e)), zero.handling = FALSE)
+test[differential == "f"]
+
+
+system.time(test2 <- spd(x1, x2, 8))
+
+
+
+lapply(test2, function(x) x$value %>% sum) %>% unlist %>% sum
+
+test <- decompose_final_demand(cbind(Y, c(5,3,1,0)))
+e0 <- IO_calculator(S = io_table$year0$S, L = io_table$year0$L, 
+              Y = io_table$year0$Y, detailed = FALSE)
+e1 <- IO_calculator(S = io_table$year1$S, L = io_table$year1$L, 
+                    Y = io_table$year1$Y, detailed = FALSE)
+delta_e <- e1 - e0
+
+
+test <- .SDA.lmdi(year0[c("S", "L", "Y")], year1[c("S", "L", "Y")], aggregate = FALSE) 
+
+test$L %>% as.data.table
+
+test %>% unlist %>% sum
+delta_IO(IO_calculator(year0$S, year0$L, year0$Y), IO_calculator(year1$S, year1$L, year1$Y)) %>% 
+  unlist %>% sum
+
+lapply(res, function(x) lapply(x, sum))
 
 
 
 
-
-
-
-
+delta_IO(x1, x2)
+.SDA.lmdi(x1, x2)
 
 
 
