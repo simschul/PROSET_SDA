@@ -8,3 +8,4 @@ library(pbmcapply)
 library(foreach)
 library(doParallel)
 # settings -------------------------------------------------------------------
+path2temp_results <- "./temp_results"

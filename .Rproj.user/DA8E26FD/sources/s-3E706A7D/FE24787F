@@ -5,14 +5,14 @@
     "dirty" : false,
     "encoding" : "UTF-8",
     "folds" : "",
-    "hash" : "1180939591",
+    "hash" : "0",
     "id" : "FE24787F",
-    "lastKnownWriteTime" : 1556118421,
-    "last_content_update" : 1556118421080,
+    "lastKnownWriteTime" : 1556530378,
+    "last_content_update" : 1556530378230,
     "path" : "~/Documents/PhD_PROSET/code/R/SDA/SDA/settings.R",
     "project_path" : "settings.R",
     "properties" : {
-        "cursorPosition" : "9,0",
+        "cursorPosition" : "11,0",
         "scrollLine" : "0",
         "tempName" : "Untitled3"
     },
