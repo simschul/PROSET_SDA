@@ -7,5 +7,7 @@ library(parallel)
 library(pbmcapply)
 library(foreach)
 library(doParallel)
+library(R.oo)
+
 # settings -------------------------------------------------------------------
 path2temp_results <- "./temp_results"
