@@ -67,6 +67,7 @@ leontief_series_expansion <- function(A_mat, n) {
   return(list)
 }
 
+
 # io.table <- io_table$year0[c("S", "A", "Y")]
 # io.table <- create_random_IOtable(500, 1, 1)
 # names(io.table)[2] <- "A"

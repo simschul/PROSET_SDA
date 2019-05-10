@@ -16,7 +16,6 @@ path2rproj <- file.path(path2project, "code", "R", "analyse_historic_trends")
 path2data <- file.path(path2project, "data")
 path2exiobase <- file.path(path2project, "data", "EXIOBASE3")
 path2plot <- file.path(path2rproj, "plots")
-path2temp_results <- "./temp_results"
 
 
 # Meta data --------------------------------------------------------------------

@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1557308371881.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3512191322",
+    "id" : "3676097B",
+    "lastKnownWriteTime" : 1557410216,
+    "last_content_update" : 1557410216835,
+    "path" : "~/Documents/PhD_PROSET/code/R/SDA/SDA/SPA_functions.cpp",
+    "project_path" : "SPA_functions.cpp",
+    "properties" : {
+        "cursorPosition" : "117,52",
+        "scrollLine" : "100",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : true,
+    "source_window" : "",
+    "type" : "cpp"
+}

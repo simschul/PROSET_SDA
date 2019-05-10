@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1557308816012.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "3C377F87",
+    "lastKnownWriteTime" : 1557480001,
+    "last_content_update" : 1557480001740,
+    "path" : "~/Documents/PhD_PROSET/code/R/SDA/SDA/spa_tree_pruning.R",
+    "project_path" : "spa_tree_pruning.R",
+    "properties" : {
+        "cursorPosition" : "185,5",
+        "docOutlineSize" : "151",
+        "docOutlineVisible" : "1",
+        "scrollLine" : "174",
+        "tempName" : "Untitled3"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
