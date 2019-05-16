@@ -20,10 +20,12 @@ calc_colrow_sums <- function(S, A, Y, L, n) {
   total_col.sums <-  total_em %>% colSums
   
   A_new <- diag(1, nrow = nrow(A), ncol = ncol(A))
-  list <- create_named_list(c("row.sums", "col.sums", "total"))
-  list[["total"]] <- data.table("row.sums" = total_row.sums, "col.sums" = total_col.sums)
+  list <- create_named_list(c("row.sums", "col.sums"))
+  #list[["total"]] <- data.table("row.sums" = total_row.sums, "col.sums" = total_col.sums)
   list[["row.sums"]] <- list[["col.sums"]] <- matrix(ncol = ncol(A), nrow = n)
-  for(i in 1:n) {
+  list$row.sums[1,] <- total_row.sums
+  list$col.sums[1,] <- total_col.sums
+  for(i in 2:n) {
     tmp <-  diag(S %>% as.numeric) %*% (A_new %*% diag(Y))
     
     total_row.sums <- total_row.sums - rowSums(tmp)
@@ -160,7 +162,7 @@ colrow_sums$col.sums %>% as.data.table %>%
 system.time({
   resid <- spa_rcpp(S %>% as.numeric, 
            A, L, Y %>% as.numeric, 
-           n = 5, tol = tol, tol_subtree = tol_subtree, 
+           n = 5, tol = tol, tol_subtree = tol_subtree, tol_row = tol_subtree,
            row_sums = colrow_sums$row.sums, col_sums = colrow_sums$col.sums)
 })
 
@@ -218,6 +220,12 @@ test[rank > 100 & rank <200]
 test[dim2 == 911]
 colnames_A_mat[country == "Germany" & substr(industry, 1, 6) == "Produc"]
 colnames_A_mat[id == 835]
+
+
+# test recursive rcpp -------------
+spa_recurs(S = S, A = A, x = 0, path = vector(length = n_layers), n_ind = 4, 
+           index = 1, tol = 0, L_max = n_layers, Layer = 1, emissions = 0)
+
 
 # test sf --------------------------------------------------------
 
