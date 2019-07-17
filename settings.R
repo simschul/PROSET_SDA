@@ -8,11 +8,19 @@ library(pbmcapply)
 library(foreach)
 library(doParallel)
 library(R.oo)
+library(bit64)
+library(raster)
+library(sf)
 
+
+library(viridis)
+library(ggthemes)
+library(gganimate)
+library(gifski)
 # settings -------------------------------------------------------------------
 # 1. Paths ---------------------------------------------------------------------
 path2project <- "/home/simon/Documents/PhD_PROSET"
-path2rproj <- file.path(path2project, "code", "R", "analyse_historic_trends")
+path2rproj <- file.path(path2project, "code", "R", "SDA", "SDA")
 path2data <- file.path(path2project, "data")
 path2exiobase <- file.path(path2project, "data", "EXIOBASE3")
 path2plot <- file.path(path2rproj, "plots")
@@ -42,7 +50,12 @@ colnames_A_mat <- readRDS(file = file.path(path2data, "colnames_A_mat.RData"))
 colnames_y <- readRDS(file.path(path2data, "colnames_y.RData"))
 countries_class <- fread(file.path(path2exiobase, "EB3_countries_classification.csv"))
 
+
+stressor_names <- fread(file.path(path2data, "stressor_names.csv"))
+
 load(file.path(path2data, "Industry_classification.RData"))
+
+Industry_classes[Class1 == "Manufacturing" & Country == "Germany"]
 
 # settings ---------------------------------------------------------------------
 years <- 1995:2011

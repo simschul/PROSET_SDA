@@ -9,72 +9,24 @@ S <- io_table$year0$S
 L <- io_table$year0$L
 A <- io_table$year0$A
 Y <- io_table$year0$Y
+x <- calculate_x(Y = Y, L= L)
+F_total <- S %*% L
 
-# calculate row and column sums
-calc_colrow_sums <- function(S, A, Y, L, n) {
-  if(dim(S)[1] > 1) stop("S needs to be either vector or matrix with nrow == 1 
-                         (currently only implemented for one stressor)")
-  if(!is.null(dim(Y))) Y <- rowSums(Y)
-  total_em <- diag(S %>% as.numeric) %*% (L %*% diag(Y))
-  total_row.sums <-   total_em %>% rowSums
-  total_col.sums <-  total_em %>% colSums
-  
-  A_new <- diag(1, nrow = nrow(A), ncol = ncol(A))
-  list <- create_named_list(c("row.sums", "col.sums"))
-  #list[["total"]] <- data.table("row.sums" = total_row.sums, "col.sums" = total_col.sums)
-  list[["row.sums"]] <- list[["col.sums"]] <- matrix(ncol = ncol(A), nrow = n)
-  list$row.sums[1,] <- total_row.sums
-  list$col.sums[1,] <- total_col.sums
-  for(i in 2:n) {
-    tmp <-  diag(S %>% as.numeric) %*% (A_new %*% diag(Y))
-    
-    total_row.sums <- total_row.sums - rowSums(tmp)
-    total_col.sums <- total_col.sums - colSums(tmp)
-    
-    list$row.sums[i,] <- total_row.sums
-    list$col.sums[i,] <- total_col.sums
-    
-    # list[[i]][["row.sums"]] <- rowSums(tmp)
-    # list[[i]][["col.sums"]] <- colSums(tmp)
-    if(i < n) A_new <- A_new %*% A
-  }
-  rm(tmp, i, A_new)
-  gc()
-  return(list)
+spa_sector_test(S = S, A = A, L = L, x = x, F_total = F_total, n = 6, 
+                tol = 0.1, tol_subtree = 20, sector = 2)
+
+fread("example.txt")
+
+
+test2 <- calc_colrow_sums(S, A, Y, L, 10)
+
+vec1 <- 1:4
+vec2 <- 2:5
+vec1 %*% vec2
+res <- 0
+for(i in 1:4) {
+  res <- res + (vec1[i] * vec2[i])
 }
-
-colrow_sums <- calc_colrow_sums(S, A, Y, L, 9)
-apply(colrow_sums$col.sums, 1, function(x) {
-  x / colrow_sums$total$col.sums
-}) %>% t  
-
-
-
-
-calc_colrow_cumsums <- function(S, A, Y, n) {
-  if(dim(S)[1] > 1) stop("S needs to be either vector or matrix with nrow == 1 
-                         (currently only implemented for one stressor)")
-  if(!is.null(dim(Y))) Y <- rowSums(Y)
-  A_new <- diag(1, nrow = nrow(A), ncol = ncol(A))
-  list <- vector(mode = "list", length = n)
-  for(i in 1:n) {
-    tmp <-  diag(S %>% as.numeric) %*% (A_new %*% diag(Y))
-    if(i > 1) {
-      list[[i]][["row.sums"]] <- rowSums(tmp) + list[[i-1]][["row.sums"]]
-      list[[i]][["col.sums"]] <- colSums(tmp) + list[[i-1]][["col.sums"]]
-    } else {
-      list[[i]][["row.sums"]] <- rowSums(tmp)
-      list[[i]][["col.sums"]] <- colSums(tmp)  
-    }
-    if(i < n) A_new <- A_new %*% A
-  }
-  rm(tmp, i, A_new)
-  gc()
-  return(list)
-}
-
-test2 <- calc_colrow_cumsums(S, A, Y, 10)
-
 
 
 #total_row_sum <- diag(S %>% as.numeric) %*% 
@@ -119,107 +71,6 @@ fp_series <- lapply(L_series, function(x) {
 fp_part <- Reduce("+", fp_series)
 
 fp_dif <- (fp_total - fp_part)/fp_total
-
-# exiobase ---------------------------------
-path2exiobase <- "/home/simon/Documents/PhD_PROSET/data/EXIOBASE3"
-
-S <- fread(file.path(path2exiobase, "S_1995.csv")) %>%
-  .[1,] %>% as.matrix
-
-L <- fread(file.path(path2exiobase, "L_1995.csv")) %>% as.matrix
-A <- fread(file.path(path2exiobase, "A_1995.csv")) %>% as.matrix
-Y <- fread(file.path(path2exiobase, "Y_1995.csv")) %>%
-  as.matrix %>% rowSums
-
-# A[which(A == 0)] %>% length %>% `/`(., length(A))
-# system.time(A2 <- A %*% A)
-# A2[which(A2 == 0)] %>% length %>% `/`(., length(A2))
-
-# test RCPP function --------------------------------------------
-
-ncol <- 500
-A <- matrix(((runif(ncol*ncol))), ncol, ncol)
-A[sample(c(T, F), ncol * ncol / 2, replace = TRUE)] <- 0
-B <- matrix(((runif(ncol*ncol))), ncol, ncol)
-B[sample(c(T, F), ncol * ncol / 2, replace = TRUE)] <- 0
-
-system.time(test <- myMmult(A, A, 0.1))
-
-
-n_layers <- 6
-system.time(colrow_sums <- calc_colrow_sums(S = S, A = A, Y = Y, L = L, n_layers))
-tol_subtree <- 80  #1E10
-tol <- 0  #1E6
-apply(colrow_sums$col.sums, 1, function(x) {
-  x[which(x > tol_subtree)] %>% length
-}) 
-#colrow_sums$col.sums[which(colrow_sums$col.sums < tol_subtree)] <- NA
-colrow_sums$col.sums %>% as.data.table %>% 
-  .[, lapply(.SD, function(x) ifelse(x < tol_subtree, NA, x))] %>% 
-  .[, lapply(.SD, min, na.rm = TRUE)] %>% 
-  sum(na.rm = TRUE) / (colrow_sums$total$col.sums %>% sum)
-
-system.time({
-  resid <- spa_rcpp(S %>% as.numeric, 
-           A, L, Y %>% as.numeric, 
-           n = 5, tol = tol, tol_subtree = tol_subtree, tol_row = tol_subtree,
-           row_sums = colrow_sums$row.sums, col_sums = colrow_sums$col.sums)
-})
-
-
-test <- fread("example.txt")
-
-test <- tstrsplit(test$paths, " ") %>% as.data.table %>%
-  setnames(paste0("dim", 1:length(names(.)))) %>% 
-  .[, lapply(.SD, as.numeric)] %>% 
-  .[, lapply(.SD, function(x)(ifelse(x == "nan", NA, x)))] %>% 
-  cbind(., test) %>% 
-  .[, paths := NULL] %>% 
-  .[, "rank" := frankv(value, order = -1)] %>% 
-  setorder(., rank)
-
-
-total <- colrow_sums$total$row.sums %>% sum
-test[, sum(value)] / total
-resid / total
-
-(test[, sum(value)] + resid + subtree_total)  #colrow_sums$col.sums[6,] %>% sum)
-colrow_sums$row.sums[3,] %>% sum
-(S %*% L %*% Y) 
-
-l_series <- leontief_series_expansion(A, 6)
-fp_series <- lapply(l_series, function(x) S %*% x %*% Y) 
-
-fp_series_sum <- fp_series %>% unlist %>% sum
-fp_series_dif <- total - fp_series_sum
-
-test[, sum(value)] + resid + fp_series_dif
-
-
-subtree_total <- colrow_sums$col.sums %>% as.data.table %>% 
-  .[, lapply(.SD, function(x) ifelse(x < tol_subtree, NA, x))] %>% 
-  .[, lapply(.SD, min, na.rm = TRUE)] %>%
-  as.numeric %>%
-  .[which(. != -Inf)] %>% 
-  sum(na.rm = TRUE)
-
-#subtree_total + 
-test[, sum(value)] + resid + 87.0195+75.56018+57.07821+60.0779
-test[, sum(value)] + resid +105.79625+ 82.42564 +86.82803+ 87.0195
-test[order == 5]  
-total
-
-colrow_sums$col.sums %>% rowSums()
-((S %*% diag(Y %>% as.numeric)) + colrow_sums$col.sums[1,]) %>% sum
-875+320
-
-test[, "rank" := frankv(V2, order = -1)]
-setorder(test, rank)
-
-test[rank > 100 & rank <200]
-test[dim2 == 911]
-colnames_A_mat[country == "Germany" & substr(industry, 1, 6) == "Produc"]
-colnames_A_mat[id == 835]
 
 
 # test recursive rcpp -------------

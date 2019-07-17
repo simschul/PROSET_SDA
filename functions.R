@@ -1,16 +1,35 @@
 # functions 
+path_extract <- function(string){  
+  unlist(regmatches(string, gregexpr("[[:digit:]]+\\.*[[:digit:]]*", string))) %>% 
+    as.numeric
+}
+
+get_emitting_sector <- function(dt) {
+  dt <- dt[, c("rank", eval(paste0("dim", 1:n_layers))), with = FALSE]
+  temp <- melt(dt, id.vars = "rank") %>% 
+    .[, variable := substring(variable, 4) %>% as.numeric]
+  
+  temp <- temp[!is.nan(value), max(variable, na.rm = TRUE), by = rank] %>%
+    setnames(., "V1", "variable") %>% 
+    merge(., temp, by = c("rank", "variable")) %>% 
+    merge(dt, ., by = "rank")
+  setnames(temp, c("variable", "value"), c("order", "emitter"))
+  return(temp[])
+}
+
 
 # 1. Basic IO functions --------------------------------------------------------
 calculate_x <- function(Z, Y, va, L) {
+  if(!is.null(dim(Y))) Y <- apply(Y, 1, sum) # if Y is matrix
   if(missing(L)) {
     # check if mass balanced
-    if(!all.equal(apply(Z, 1, sum) + apply(Y, 1, sum), apply(Z, 2, sum) + va)) {
+    if(!all.equal(apply(Z, 1, sum) + Y, apply(Z, 2, sum) + va)) {
       stop("IO system is not mass balanced !!")
     }
     # calculate output
-    x <- apply(Z, 1, sum) + apply(Y, 1, sum)  
+    x <- apply(Z, 1, sum) + Y  
   } else {
-    x <- L %*% apply(Y, 1, sum)
+    x <- L %*% Y
   }
   return(x)
 }
@@ -66,6 +85,70 @@ leontief_series_expansion <- function(A_mat, n) {
   }
   return(list)
 }
+
+
+
+
+
+calc_colrow_sums <- function(S, A, Y, L, n) {
+  if(dim(S)[1] > 1) stop("S needs to be either vector or matrix with nrow == 1 
+                         (currently only implemented for one stressor)")
+  if(!is.null(dim(Y))) Y <- rowSums(Y)
+  cat("|", rep("_", n), "|\n", sep = "")
+  cat("|*", sep = "")
+  total_em <- diag(S %>% as.numeric) %*% (L %*% diag(Y))
+  total_row.sums <-   total_em %>% rowSums
+  total_col.sums <-  total_em %>% colSums
+  
+  A_new <- diag(1, nrow = nrow(A), ncol = ncol(A))
+  list <- create_named_list(c("row.sums", "col.sums"))
+  #list[["total"]] <- data.table("row.sums" = total_row.sums, "col.sums" = total_col.sums)
+  list[["row.sums"]] <- list[["col.sums"]] <- matrix(ncol = ncol(A), nrow = n)
+  list$row.sums[1,] <- total_row.sums
+  list$col.sums[1,] <- total_col.sums
+  for(i in 2:n) {
+    cat("*", sep = "")
+    tmp <-  diag(S %>% as.numeric) %*% (A_new %*% diag(Y))
+    total_row.sums <- total_row.sums - rowSums(tmp)
+    total_col.sums <- total_col.sums - colSums(tmp)
+    
+    list$row.sums[i,] <- total_row.sums
+    list$col.sums[i,] <- total_col.sums
+    
+    # list[[i]][["row.sums"]] <- rowSums(tmp)
+    # list[[i]][["col.sums"]] <- colSums(tmp)
+    if(i < n) A_new <- A_new %*% A
+  }
+  rm(tmp, i, A_new)
+  gc()
+  cat("|")
+  return(list)
+}
+
+
+
+calc_colrow_cumsums <- function(S, A, Y, n) {
+  if(dim(S)[1] > 1) stop("S needs to be either vector or matrix with nrow == 1 
+                         (currently only implemented for one stressor)")
+  if(!is.null(dim(Y))) Y <- rowSums(Y)
+  A_new <- diag(1, nrow = nrow(A), ncol = ncol(A))
+  list <- vector(mode = "list", length = n)
+  for(i in 1:n) {
+    tmp <-  diag(S %>% as.numeric) %*% (A_new %*% diag(Y))
+    if(i > 1) {
+      list[[i]][["row.sums"]] <- rowSums(tmp) + list[[i-1]][["row.sums"]]
+      list[[i]][["col.sums"]] <- colSums(tmp) + list[[i-1]][["col.sums"]]
+    } else {
+      list[[i]][["row.sums"]] <- rowSums(tmp)
+      list[[i]][["col.sums"]] <- colSums(tmp)  
+    }
+    if(i < n) A_new <- A_new %*% A
+  }
+  rm(tmp, i, A_new)
+  gc()
+  return(list)
+}
+
 
 
 # io.table <- io_table$year0[c("S", "A", "Y")]
@@ -218,7 +301,6 @@ leontief_series_expansion <- function(A_mat, n) {
   return(fp)
 }
 
-
 .calc.sector.fp.indirect <- function(S_mat, L_mat, x, index) {
   diag(L_mat) <- 0 # all diagonal entries (e.g. input of cars into car industry) are already considered in the direct footprint calculations
   if(missing(index)) {
@@ -228,6 +310,8 @@ leontief_series_expansion <- function(A_mat, n) {
   }
   return(fp)
 }
+
+
 
 #' Title
 #'
@@ -245,6 +329,7 @@ calc_footprint_sector <- function(L_mat, S_mat, y_vec, index,
                                   detailed = FALSE) {
   direct <- .calc.sector.fp.direct(S_mat = S_mat, L_mat = L_mat, 
                                    y_vec = y_vec, index = index)
+  x <- calculate_x(Y = Y, L = L)
   indirect <- .calc.sector.fp.indirect(S_mat = S_mat, L_mat = L_mat, 
                                        x = x, index = index)
   if(detailed) {
@@ -293,6 +378,19 @@ SPA_footprint_sector <- function(n = 8, L_mat, A_mat, y_vec, S_mat, index) {
 
 
 # 3. SPD - structural path decomposition --------------------------------------
+
+contribution_path <- function(path, S, A, Y) {
+  len <- length(path)
+  Y <- as.vector(Y)
+  node.z <- Y[path[1]]
+  if(len > 1) {
+    for(i in 2:len) {
+      node.z <- node.z * A[path[i], path[i-1]]
+    }  
+  }
+  return(as.numeric(S[path[len]] * node.z))
+}
+
 
 log_mean <- function(x, y) {
   return((x - y) / (log(x) - log(y)))
@@ -472,6 +570,7 @@ mat2dt <- function(mat, exclude.zeros = FALSE, exclude.na = FALSE) {
   return(decomp)
 }
 
+#.SDA.lmdi(list("S"= S0,"Y"= x0), list("S"= S1,"Y" = x1))
 # n_ind <- 300
 # n_em <- 1
 # n_fd <- 1
