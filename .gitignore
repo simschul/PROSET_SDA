@@ -5,16 +5,13 @@
 *.Rproj.user
 *.gif
 *.RData
-.RData
 
+.RData
 .Rhistory
 .Rapp.history
-
-
-
-
 .Ruserdata
 
 
 plots/
 temp_results/
+*results/
