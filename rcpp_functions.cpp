@@ -42,6 +42,8 @@ double vecMult (NumericVector x, NumericVector y) {
 }
 
 
+
+
 // [[Rcpp::export]]
 
 NumericVector SDA_lmdi (NumericVector y0, NumericVector y1) {

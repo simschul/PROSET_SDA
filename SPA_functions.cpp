@@ -332,6 +332,8 @@ double spa_sector(NumericVector S, NumericMatrix A, NumericMatrix L,
   return(resid);
 }
 
+
+
 // [[Rcpp::export]]
 
 double vecMult (NumericVector x, NumericVector y) {
@@ -345,25 +347,58 @@ double vecMult (NumericVector x, NumericVector y) {
   return res; 
 }
 
-void writeToFile (std::ofstream& myfile, NumericVector path, double x, int n) {
-  // path = NumericVector::create(sector+1, NA_REAL, NA_REAL, NA_REAL, NA_REAL, NA_REAL);
-  NumericVector pathToWrite(n, NA_REAL); 
-  for(int i = 0; i < path.length(); i++) {
-    pathToWrite(i) = path(i); 
-  }
+// [[Rcpp::export]]
+double calcContSubtree (double x, int index, 
+                        NumericVector F_total, 
+                        NumericVector yz)  {
+  yz(index) = x; 
+  double contSubtree = vecMult(F_total, yz); 
+  yz(index) = 0; 
+  return contSubtree; 
+}
+
+// [[Rcpp::export]]
+double calcNewX (double xold, NumericMatrix A, int index1, int index2) {
+  double xnew = A(index2, index1) * xold; 
+  return xnew; 
+}
+
+// [[Rcpp::export]]
+void writeToFile (std::ostream& outfile, NumericVector path, double x, int n, double tol) {
+  if (x > tol) {
+    NumericVector pathToWrite(n, NA_REAL);
+    for(int i = 0; i < path.length(); i++) {
+      pathToWrite(i) = path(i);
+    }
+    outfile << "ghelle" << "\t" << "pathToWrite"; 
+    //myfile << 2 << "\t" << path; myfile << "\t"; myfile << B; myfile << "\n";
+  } 
   
+ 
   
-  myfile << path.length() << "\t" << pathToWrite; myfile << "\t"; myfile << x; myfile << "\n";
+  //myfile << path.length() << "\t" << pathToWrite; myfile << "\t"; myfile << x; myfile << "\n";
   
 }
 
 
-// [[Rcpp::export]]
 
+// // [[Rcpp::export]]
+// void writeToFile (std::ofstream& myfile, NumericVector path, double x, int n) {
+//   NumericVector pathToWrite(n, NA_REAL);
+//   for(int i = 0; i < path.length(); i++) {
+//     pathToWrite(i) = path(i);
+//   }
+//   myfile << path.length() << "\t" << pathToWrite; myfile << "\t"; myfile << x; myfile << "\n";
+//   
+// }
+
+
+
+// [[Rcpp::export]]
 double spa_sector_test(NumericVector S, NumericMatrix A, NumericMatrix L, 
                        NumericVector x, int sector, NumericVector F_total, 
                        int n, double tol, double tol_subtree, 
-                      bool progress=true, 
+                       bool progress=true, 
                        string file = "example.txt") {
   sector = sector - 1; // translate from R (starting with 1) to C++ (with 0)
   n = 6;
@@ -404,12 +439,9 @@ double spa_sector_test(NumericVector S, NumericMatrix A, NumericMatrix L,
   for (int k = 0; k < n_ind; k++) {
     p.increment();
     x1 = A(k,sector) * x0;
-
-    yz(k) = x1; 
-    contSubtree = vecMult(F_total, yz); 
-    yz(k) = 0; 
-    
     B = S(k) * x1;
+    contSubtree = calcContSubtree(x1, k, F_total, yz);
+    
     if (B > tol) {
       path = NumericVector::create(sector+1, k+1, NA_REAL, NA_REAL, NA_REAL, NA_REAL);
       myfile << 2 << "\t" << path; myfile << "\t"; myfile << B; myfile << "\n";
@@ -493,18 +525,39 @@ double spa_sector_test(NumericVector S, NumericMatrix A, NumericMatrix L,
                     }
                     // layer 6 add here *************************************
                     // for () .... 
+                    if (contSubtree > tol_subtree) {
+                      // subtree is above threshold -> continue
+                      double x6;
+                      for (int p = 0; p < n_ind; p++) {
+                        x6 = A(p,o) * x5;
+                        
+                        yz(p) = x6; 
+                        contSubtree = vecMult(F_total, yz); 
+                        yz(p) = 0; 
+                        
+                        B = S(p) * x6;
+                        if (B > tol) {
+                          path = NumericVector::create(sector+1, k+1, l+1, m+1, n+1, o+1, p+1);
+                          myfile << 7 << "\t" << path; myfile << "\t"; myfile << B; myfile << "\n";
+                        } else {
+                          resid += B; 
+                        }
+                      }
+                    }
                   }
-                }
-              }  
+                }  
+              }
             }
-          }
+          }   
         }   
-      }   
-    } 
+      } 
+    }
   }
   myfile.close();
   return(resid);
 }
+
+
 
 // [[Rcpp::export]]
 
