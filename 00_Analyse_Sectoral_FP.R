@@ -45,6 +45,7 @@ for(year in years) {
   L <- fread(file.path(path2exiobase, paste0("L_", year, ".csv"))) %>% as.matrix
   Y <- fread(file.path(path2exiobase, paste0("Y_", year, ".csv")), select = ids_fd) %>%
     as.matrix %>% rowSums
+  x <- calculate_x(Y = Y, L = L)
   
   # 2. calculate emisions
   direct_em <- S[1, id_sector] * x[id_sector] # Si * xi
@@ -64,7 +65,15 @@ for(year in years) {
 
 data <- melt(data, id.vars = c("id", "country", "industry"), variable.name = "year")
 data[, "rank" := frankv(value, order = -1L), by = year]
-data[, year := as.integer(year)]
+
+data[, year := year %>% as.character %>% as.integer]
+
+
+
+
+# _b) write to disk -----------------------------------------------------------------
+fwrite(data, file.path(path2temp_results, 
+                       paste0("sectoralCarbonFP", id_sector, ".csv") ))
 
 # select important industries and countries: 
 i_ind <- data[, mean(value), by = .(industry)][V1 > 0.005 * sum(V1)]$industry

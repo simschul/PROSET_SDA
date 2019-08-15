@@ -18,16 +18,14 @@ source("./functions.R")
 
 
 id_sector <- colnames_A_mat[country == "Germany" & grepl("Manufacture of motor vehicles", industry)]$id
-years <- c(1995, 2011)
-
-
+years <- (1995:2011)
 
 ############################################################################## #
 ###### 1. Load and prepare data ############################################################
 ############################################################################## #
 
-files <- list.files(path = file.path(path2temp_results), 
-                    pattern = "sector906_", full.names = TRUE)
+files <- list.files(path = file.path(path2model_results), 
+                    pattern = "^sector906_.*?.csv" , full.names = TRUE)
 data <- lapply(files, fread) %>% 
   setNames(years %>% as.character) %>% 
   rbindlist(idcol = "year") %>% 
@@ -53,7 +51,7 @@ data_list <- list("paths" = data[, c("pathID", "order", paste0("dim", 1:n_layers
 
 
 # 2. Save to disk --------------------------------------------------------------
-saveRDS(data_list, file = file.path(path2temp_results, "SPAdata2analyse.RData"))
+saveRDS(data_list, file = file.path(path2model_results, "SPAdata2analyse.RData"))
 
 
 

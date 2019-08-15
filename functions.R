@@ -5,7 +5,8 @@ path_extract <- function(string){
 }
 
 get_emitting_sector <- function(dt) {
-  dt <- dt[, c("rank", eval(paste0("dim", 1:n_layers))), with = FALSE]
+  n <- dt[, max(order, na.rm = TRUE)]
+  dt <- dt[, c("rank", eval(paste0("dim", 1:n))), with = FALSE]
   temp <- melt(dt, id.vars = "rank") %>% 
     .[, variable := substring(variable, 4) %>% as.numeric]
   
@@ -16,6 +17,23 @@ get_emitting_sector <- function(dt) {
   setnames(temp, c("variable", "value"), c("order", "emitter"))
   return(temp[])
 }
+
+get_node_pos <- function(node, n.industries = 163) {
+  x <- (node %/% n.industries) + 1
+  y <- node %% n.industries
+  return(c("x" = x, "y" = y))
+}
+
+
+combine_words_regexp <- function(words) {
+  regexp <- ""
+  for(i in 1:length(words)) {
+    regexp <- paste0(regexp, "(?=.*", words[i], ")")
+  }
+  return(regexp)
+}
+
+
 
 
 # 1. Basic IO functions --------------------------------------------------------

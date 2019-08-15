@@ -363,22 +363,22 @@ double calcNewX (double xold, NumericMatrix A, int index1, int index2) {
   return xnew; 
 }
 
-// [[Rcpp::export]]
-void writeToFile (std::ostream& outfile, NumericVector path, double x, int n, double tol) {
-  if (x > tol) {
-    NumericVector pathToWrite(n, NA_REAL);
-    for(int i = 0; i < path.length(); i++) {
-      pathToWrite(i) = path(i);
-    }
-    outfile << "ghelle" << "\t" << "pathToWrite"; 
-    //myfile << 2 << "\t" << path; myfile << "\t"; myfile << B; myfile << "\n";
-  } 
-  
- 
-  
-  //myfile << path.length() << "\t" << pathToWrite; myfile << "\t"; myfile << x; myfile << "\n";
-  
-}
+// // [[Rcpp::export]]
+// void writeToFile (std::ostream& outfile, NumericVector path, double x, int n, double tol) {
+//   if (x > tol) {
+//     NumericVector pathToWrite(n, NA_REAL);
+//     for(int i = 0; i < path.length(); i++) {
+//       pathToWrite(i) = path(i);
+//     }
+//     outfile << "ghelle" << "\t" << "pathToWrite"; 
+//     //myfile << 2 << "\t" << path; myfile << "\t"; myfile << B; myfile << "\n";
+//   } 
+//   
+//  
+//   
+//   //myfile << path.length() << "\t" << pathToWrite; myfile << "\t"; myfile << x; myfile << "\n";
+//   
+// }
 
 
 

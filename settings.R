@@ -17,6 +17,9 @@ library(viridis)
 library(ggthemes)
 library(gganimate)
 library(gifski)
+library(directlabels)
+library(ggrepel)
+library(alluvial)
 # settings -------------------------------------------------------------------
 # 1. Paths ---------------------------------------------------------------------
 path2project <- "/home/simon/Documents/PhD_PROSET"
@@ -26,7 +29,7 @@ path2exiobase <- file.path(path2project, "data", "EXIOBASE3")
 path2plot <- file.path(path2rproj, "plots")
 path2temp_results <- "./temp_results"
 
-
+options("datatable.print.class" = TRUE)
 # Meta data --------------------------------------------------------------------
 
 final_demand_categories <- data.table("long" = c("Final consumption expenditure by households"                                         

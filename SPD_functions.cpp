@@ -27,7 +27,6 @@ double vecProd (NumericVector x) {
   return res; 
 }
 
-// [[Rcpp::export]]
 
 NumericVector SDA_lmdi (NumericVector y0, NumericVector y1) {
   if(y0.length() != y1.length()) {
@@ -54,14 +53,14 @@ NumericVector SDA_lmdi (NumericVector y0, NumericVector y1) {
 // [[Rcpp::export]]
 
 // table0 and table0 need to be named lists. 1st element: S-matrix, 2nd: A-matrix, all other: egal
-List SPD (List table0, List table1, List indices) {
+List SPD (List table0, List table1, List indices, bool progress=true) {
   if(table0.length() != table1.length()) {
     throw std::range_error("Lists are not of the same length!");
   } 
   
   int n = indices.length();
   int n_comp = table0.length(); 
-  
+  Progress p(n, progress);
   //List indices = listOfMatsMinusOne(indices); 
   // extract A matrices. Later needed for SAAAAY
   NumericMatrix a0 = as<NumericMatrix>(table0["A"]); 
@@ -69,6 +68,7 @@ List SPD (List table0, List table1, List indices) {
   
   List spd(n); 
   for(int ilayer = 0; ilayer < n; ilayer++) {
+    p.update(ilayer); 
     // extract indices for each layer
     NumericMatrix indexMatrix = as<NumericMatrix>(indices[ilayer]);
     if (ilayer > 0) {
