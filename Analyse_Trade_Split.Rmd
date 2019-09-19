@@ -1,0 +1,326 @@
+---
+title: "Investigating the Trade split assumption of MRIOs"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+source("./settings.R")
+source("./functions.R")
+```
+
+
+
+# Background
+Whats the trade split assumption? 
+Problem: Trade data bases (mainly comtrade, are there others?) does report on 
+the destinations of 
+imported product, i.e. the industrial sector where the import goes to. So we 
+know how much (expressed in monetary units) steel Germany imports and where
+(which country) this steel comes from. However, we do not know where the steel
+used in the German car manufacturing really comes from. 
+Therefore, most (if not all?) MRIO tables make the assumption that the import
+shares of one product in one country are the same for ALL industries using that
+product. 
+
+# Check EXIOBASE3 for that assumption
+
+Lets start by first loading the most recent version of EXIOBASE (3.6). It's 
+comes as a product by product IO table in current prices. 
+```{r}
+ipath <- file.path(path2exiobase, "V3.6")
+iyear <- 2011
+Z <- fread(file.path(ipath, paste0("IOT_", iyear, "_pxp"), "Z.txt")) %>% 
+  as.matrix
+dim(Z)
+Za <- array(Z, dim = c(200,49,200, 49))
+Za[123,6,159,31] == Z[1123,6159]
+
+
+```
+
+
+
+We now select the products of the sector "Basic iron and steel and of ferro-alloys and first products thereof" which has the index 104 (out of 200 products). 
+
+
+```{r}
+EB3_metadata$pxp200[grepl("Motor", product200_name)]
+isector <- 3
+#iprod <- seq(29, 9800, by = 200)
+iprod <- matrix(rep(seq(isector, 9800, by = 200), 49), ncol = 49)
+diag(iprod) <- NA
+dim(iprod)
+
+#isector <- 1123
+```
+
+Now we calculate the trade shares of products of that category and plot: 
+```{r}
+imp_shares <- array(dim = c(200,49,200,49), 
+                    dimnames = list(EB3_metadata$pxp200$product200_name,
+                                    EB3_metadata$regions$country_code2, 
+                                    EB3_metadata$pxp200$product200_name,
+                                    EB3_metadata$regions$country_code2)) 
+i <- 1
+j <- 1
+for (i in 1:dim(imp_shares)[1]) {
+  for (j in 1:dim(imp_shares)[4]) {
+    z <- Za[i,,,j]
+    z[j,] <- 0
+    z <- apply(z, 2, function(x) x / sum(x, na.rm = TRUE)) 
+    imp_shares[i,,,j] <- z  
+    }
+}
+for(i in 1:10) imp_shares[i,,,6] %>% barplot(col = viridis(49), border = viridis(48))
+apply(imp_shares)
+
+colsums <- vector("numeric", 200)
+for(i in 1:200) colsums[i] <- imp_shares[i,,,6] %>% apply(., 1, sd, na.rm = TRUE) 
+which(colsums == max(colsums, na.rm = T))
+imp_shares[13,,,6] %>% barplot(col = viridis(49), border = viridis(49), 
+                               las = 2, cex.names = 0.4)
+
+
+######
+Tmat <- matrix(0, nrow = 200, ncol = 9800)
+
+
+i <- 6
+for(i in 1:ncol(iprod)) {
+
+  icountry <- (((i:(i+1))-1)*200) + 1
+  # calculate imports of one product in one country by sector
+  zi <- Z[iprod[,i], icountry[1]:(icountry[2]-1)]
+  dim(Tmat)
+  zi <- apply(zi, 2, function(x) x / sum(x, na.rm = TRUE))
+  zi[is.na(zi)] <- 0
+  zi[is.nan(zi)] <- 0
+  
+  barplot(zi, col = viridis(49))
+  Tmat[, icountry[1]:(icountry[2]-1)] %>% dim
+  Tmat[, icountry[1]:(icountry[2]-1)] <- zi / sum(zi, na.rm = TRUE)
+}
+
+Tmat %>% raster %>% plot
+
+#dim(Tmat)
+ids_GER <- EB3_metadata$colnames200[country_name == "Netherlands"]$id
+barplot(Tmat[, ids_GER], col = viridis(48), border = viridis(48), 
+        names.arg = EB3_metadata$pxp200$id, 
+        las = 2, cex.names = 0.4)
+Tmat[, ids_GER] %>% apply(., 1, sd, na.rm = TRUE)
+
+
+
+```
+
+And truly every sector imports steel with the exactly same import mix.  
+
+# What can be done about it?
+
+```{r}
+shares <- Tmat[, ids_GER] %>% rowMeans
+```
+
+
+```{r}
+dt_origin <- data.table("origin" = c("A", "B", "C", "D"), 
+                        "value" = c(3,2,4,1))
+dt_dest <- data.table("dest" = c("a", "b", "c", "d"), 
+                      "value" = c(2,4,1,3))
+dt_origin[, "prop" := value / sum(value)]
+
+flows <- data.table("origin" = rep(dt_origin$origin, each = 4), 
+                    "dest" = rep(dt_dest$dest, 4))
+flows <- merge(flows, dt_origin, by = "origin")
+flows <- merge(flows, dt_dest, by = "dest", suffixes = c(".origin", ".dest"))
+setcolorder(flows, c("origin", "dest"))
+flows[, "value.flow" := prop * value.dest]
+flows[, mean(value.dest), by = dest]
+
+
+```
+
+
+
+```{r}
+library(gtools)
+# origin
+a <- 3.5
+b <- 2.1
+c <- 4.4
+n_origin <- 3
+origin_vec <- c(a, b, c) 
+names(origin_vec) <- c("a", "b", "c")
+# destination
+A <- 1.3
+B <- 3.6
+C <- 2.7
+D <- 2.4
+n_dest <- 4
+dest_vec <- c(A, B, C, D)
+dest <- data.table("group" = LETTERS[1:4],
+                   "value" = c(A, B, C, D))
+dest[, "cumsum" := cumsum(value)]
+
+
+N <- 50
+n_iter <- 500
+set.seed(123)
+i <- 1
+list <- create_named_list(1:n_iter)
+
+for(i in 1:n_iter) {
+  # system.time(
+  # data <- data.table(origin = c(rep("a", N+1), rep("b", N+1), rep("c", N+1)),
+  #                    value = c(runif(N, min = 0, max = a) %>% sort %>%
+  #                                c(0,.,a) %>% diff,
+  #                              runif(N, min = 0, max = b) %>% sort %>%
+  #                                c(0,.,b) %>% diff,
+  #                              runif(N, min = 0, max = c) %>% sort %>%
+  #                                c(0,.,c) %>% diff))
+  # )
+  
+  # split each import flow into N random sized bins  
+  data <- lapply(origin_vec, function(x) {
+    runif(N, min = 0, max = x) %>%
+      sort %>%
+      c(0,.,x) %>%
+      diff %>%
+      as.data.table %>%
+      setnames("value")
+  }) %>% setNames(names(origin_vec)) %>%
+    rbindlist(idcol = "origin")
+  
+  # assign random numbers to each bin 
+  data[, "bin" := sample((1:(3*N + 3)), replace = FALSE)]
+  setorder(data, bin)
+  data[, "cumsum" := cumsum(value)]
+  
+  # split those flows directly at the border between two destinations
+  for(j in unique(dest$group)) {
+    if (!(dest[group == j]$cumsum %in% data$cumsum)) {
+      temp <- dest[group == j]$cumsum
+      ibin <- c(0,data[cumsum < temp]$bin) %>% max 
+      newbin <- data.table(origin = data[bin == ibin+1]$origin, 
+                           value = dest[group == j]$cumsum - 
+                             ifelse(length(data[bin == ibin]$cumsum) == 0, 
+                                    0, data[bin == ibin]$cumsum), 
+                           bin = ibin + 0.5, 
+                           cumsum = dest[group == j]$cumsum)
+      data[bin == ibin+1, value := value - newbin$value]
+      data <- rbind(data, newbin) %>% 
+        setorder(bin)    
+    }
+  }
+  
+  data[, "dest" := ""]
+  for (j in rev(unique(dest$group))) {
+    temp <- dest[group == j]$cumsum
+    data[cumsum <= temp, dest := j]
+  }
+  data_agg <- data[, sum(value), by = .(origin, dest)] %>% 
+    setnames("V1", "value")
+  rm(data)
+  gc()
+  data_agg[, "prop" := value / sum(value), by = dest]
+  list[[i]] <- data_agg
+  cat(i, "")
+}
+
+
+```
+
+
+
+
+```{r}
+dt <- rbindlist(list, idcol = "n")
+dt[, n := as.numeric(n)]
+dt[, "flow" := paste0(origin, "->", dest)]
+
+ggplot(dt) + 
+  geom_density(aes(x = value, fill = flow), 
+               alpha = 0.3)
+ggplot(dt) + 
+  geom_density(aes(x = prop, fill = dest), 
+               alpha = 0.3) + 
+  facet_wrap(~origin)
+
+ggplot(dt) + 
+  geom_boxplot(aes(x = dest, y = prop, fill = dest))+ 
+  facet_wrap(~origin)
+
+
+```
+
+
+
+check results and plot
+```{r}
+data[, sum(value), by = dest]
+data[, sum(value), by = group]
+temp <- data[, sum(value), by = .(group, dest)] 
+temp[, "prop" := V1 / sum(V1), by = dest]
+temp[, prop := round(prop, 2)]
+
+
+
+data[bin %% 1 == 0.5]
+ggplot(data, aes(x = bin, y = cumsum)) + 
+  geom_point(aes(color = group))
+#geom_hline(aes(yintercept = data$cumsum, color = group)) + 
+#geom_line(aes(color = dest)) 
+
+```
+
+
+
+
+# Real life example
+
+
+
+
+
+
+
+
+play around with other distribution to get a uniform dist: 
+
+```{r}
+# begin test
+set.seed(123)
+test <- rdirichlet(1000, rep(1, n_dest))
+
+hist(test[,3])
+
+
+supply <- c(a,b,c)
+use <- c(A, B, C, D)
+test2 <- (diag(supply) %*% test)
+test2 %>% colSums
+(test2 %*% diag(use))
+(test %*% diag(use)) %>% colSums()
+
+data <- data.table(id = 1:(3*N + 3),
+                   group = c(rep("a", N+1), rep("b", N+1), rep("c", N+1)),
+                   value = c(rdirichlet(N, min = 0, max = a) %>% sort %>%
+                               c(0,.,a) %>% diff,
+                             runif(N, min = 0, max = b) %>% sort %>%
+                               c(0,.,b) %>% diff,
+                             runif(N, min = 0, max = c) %>% sort %>%
+                               c(0,.,c) %>% diff))
+# end test
+
+```
+
+
+
+
+
+

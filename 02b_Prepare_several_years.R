@@ -17,15 +17,15 @@ source("./settings.R")
 source("./functions.R")
 
 
-id_sector <- colnames_A_mat[country == "Germany" & grepl("Manufacture of motor vehicles", industry)]$id
-years <- (1995:2011)
-
+list.dirs(path2temp_results)
+path2model_results <- file.path(path2temp_results, 
+                                "2019-09-11 17:22:46_1.70.71.405.415.416_1123_SPA")
 ############################################################################## #
 ###### 1. Load and prepare data ############################################################
 ############################################################################## #
 
 files <- list.files(path = file.path(path2model_results), 
-                    pattern = "^sector906_.*?.csv" , full.names = TRUE)
+                    pattern = "^sector1123_.*?.csv" , full.names = TRUE)
 data <- lapply(files, fread) %>% 
   setNames(years %>% as.character) %>% 
   rbindlist(idcol = "year") %>% 

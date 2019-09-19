@@ -1,0 +1,161 @@
+---
+title: "Revealing the paths: What were the drivers of changes in CO2-emissions from German car manufacturing?"
+author: "Simon Schulte"
+date: "September 13th, 2019"
+bibliography: "/home/simon/Documents/PhD_PROSET/tex/PROSET.bib"
+output:
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+    incremental: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source("./settings.R")
+source("./functions.R")
+```
+<style>
+.column-left{
+  float: left;
+  width: 66%;
+  text-align: left;
+}
+
+.column-right{
+  float: right;
+  width: 33%;
+  text-align: right;
+}
+</style>
+
+
+## All CO2-emissions related to Car Manufacturing in Germany
+<div class="column-left">
+```{r total}
+data <- fread(file.path(path2temp_results, "sectoralCarbonFP_pxp200_1123.csv"))
+data[, "order" := "upstream"]
+data[id == id_sector, "order" := "direct"]
+data[, order := as.factor(order)]
+data$order <- factor(data$order, level = c("upstream", "direct"))
+data[, value := value / 1E3] # to tonnes
+data[, sum(value), by = .(order, year)] %>% 
+  ggplot(aes(x = year, y = V1)) + 
+  geom_area(aes(fill = order)) + 
+  scale_fill_viridis_d() + 
+  ylab("CO2 emissions [t]") + 
+  theme_bw()
+
+```
+</div>
+
+<div class="column-right">
+$e_i = e_{direct} + e_{upstream}$ 
+$= s_i x_i + \mathbf{s} \mathbf{l⁰_i} x_i$
+</div>
+
+
+## By country
+
+```{r bycountry}
+temp <- data[, sum(value), by = .(country_name, year)] 
+temp <- temp %>% 
+  .[, "rank" := frankv(V1, order = -1L), by = .(year)] %>% 
+  .[, "mean_rank" := mean(rank), by = country_name] %>% 
+  .[mean_rank > 10, sum(V1), by = year] %>% 
+  .[, "country_name" := "RoW"] %>% 
+  .[] %>% 
+  rbind(temp[mean_rank <= 10, 
+             c("year", "country_name", "V1")], 
+        .)
+
+ggplot(temp, aes(x = year, y = V1)) + 
+  geom_area(aes(fill = country_name), position = "fill") + 
+  scale_fill_viridis_d() + 
+  ylab("Share of total emissions") + 
+  theme_bw()
+
+```
+
+## Where to these emissions occur?
+![](plots/sectoralfp_pxp200_1123_8fps.gif)
+
+
+
+## Revealing the paths .... 1995
+
+```{r spa}
+library(networkD3)
+#list.dirs(path2temp_results)
+path2model_results <- file.path(path2temp_results, 
+                                "2019-09-11 17:22:46_1.70.71.405.415.416_1123_SPA")
+data_list <- readRDS(file = file.path(path2model_results, 
+                                      "SPAdata2analyse.RData"))
+setnames(data_list$values, "value[t]", "value_t")
+IDpaths <- data_list$values[, mean(rank, na.rm = TRUE), by = pathID][V1 < 100]$pathID
+data_list$values[, "label" := ifelse(year == max(year), as.character(pathID), 
+                                     NA_character_)]
+
+
+sankeySPA(data_list, 1995, 30)
+
+```
+
+```{r}
+DT::datatable(EB3_metadata$pxp200[, 1:2], 
+              options = list(pageLength = 1)) %>% 
+  DT::formatStyle(columns = 1:2, fontSize = '50%')
+```
+
+
+## 2016
+```{r}
+sankeySPA(data_list, 2016, 30)
+```
+
+```{r}
+DT::datatable(EB3_metadata$pxp200[, 1:2], 
+              options = list(pageLength = 1)) %>% 
+  DT::formatStyle(columns = 1:2, fontSize = '50%')
+
+```
+
+
+## Structural Path Decomposition
+```{r}
+spd_results2print <- readRDS(file.path(path2temp_results, 
+                                     "spd_results2print_CO2.RData"))
+
+DT::datatable(spd_results2print[, -"id"], 
+              options = list(scrollY = '55vh')) %>% 
+  DT::formatStyle(columns = 1:7, fontSize = '50%')
+
+```
+
+
+
+## Uncertainty? {.build}
+"[...] Results at a sectoral level should therefore be interpreted with caution." [@lenzen2010]
+
+(Possible) sources of uncertainty in MRIO analysis: 
+
+* Raw Data
+    + Satellite accounts
+    + Economic data
+    + Trade data
+* Compiling MRIOs
+    + Dif. level of detail of national economic, environmental and trade data
+    + Trade-split assumption (same import mix of a product for each sector of a country)
+    + sectoral/regional aggregation 
+    + one-industry-one-product assumption
+    + Balancing procedure
+* Prices
+    + Currency conversion: Purchasing Power Parity (PPP) versus market exchange rate (MER)
+    + Converting basic prices to producer prices
+    + Handling of taxes of subsidies
+...
+
+
+

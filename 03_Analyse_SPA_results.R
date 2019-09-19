@@ -18,10 +18,9 @@ source("./functions.R")
 Rcpp::sourceCpp("SPA_functions.cpp")
 
 
-id_sector <- colnames_A_mat[country == "Germany" & grepl("Manufacture of motor vehicles", industry)]$id
-years <- 1995:2011
-
-
+list.dirs(path2temp_results)
+path2model_results <- file.path(path2temp_results, 
+                                "2019-09-04 16:45:08_716.1104_1123_SPA")
 
 
 ############################################################################## #
@@ -29,7 +28,7 @@ years <- 1995:2011
 ############################################################################## #
 
 files <- list.files(path = file.path(path2model_results), 
-                    pattern = "^sector906_.*?.csv" , full.names = TRUE)
+                    pattern = "^sector1123_.*?.csv" , full.names = TRUE)
 data <- lapply(files, fread) %>% 
   setNames(years %>% as.character) %>% 
   rbindlist(idcol = "year") %>% 
@@ -112,61 +111,70 @@ ggplot(dt_dif, aes(x = rank_dif,
 ############################################################################## #
 
 # _a) load data ----------------------------------------------------------------
-data_list <- readRDS(file = file.path(path2model_results, "SPAdata2analyse.RData"))
+data_list <- readRDS(file = file.path(path2model_results, 
+                                      "SPAdata2analyse.RData"))
 setnames(data_list$values, "value[t]", "value_t")
 
 IDpaths <- data_list$values[, mean(rank, na.rm = TRUE), by = pathID][V1 < 100]$pathID
 
+# begin test
+conc_paths <- lapply(IDpaths, function(x) {
+  #x <- IDpaths[1]
+  x <- path_extract(x)
+  sapply(x, function(i) {
+    temp <- EB3_metadata$colnames200[id == i]
+    return(paste0(temp$country_code2, temp$product200_code))
+  }) %>% 
+    paste(collapse = "-")
+}) %>% 
+  unlist %>% as.data.table
+setnames(conc_paths, "id2")
+conc_paths[, "id1" := IDpaths]
+data_list$values <- merge(data_list$values, conc_paths, 
+                          by.x = "pathID", by.y = "id1", 
+                          all.x = TRUE)
+data_list$paths <- merge(data_list$paths, conc_paths, 
+                         by.x = "pathID", by.y = "id1", 
+                         all.x = TRUE)
+
+# end
+
 data_list$values[, "label" := ifelse(year == max(year), as.character(pathID), 
                                      NA_character_)]
 # direct emissions
-fp_data <-  fread(file.path(path2temp_results, 
-                            paste0("sectoralCarbonFP", id_sector, ".csv") ))
+fp_data <- fread(file.path(path2temp_results, 
+                           paste0("sectoralFP", 
+                                  paste(ids_stressor, collapse = "."),  
+                                  "_pxp200_", id_sector, ".csv") ))
+fp_data <- fread(file.path(path2temp_results, 
+                           "sectoralCarbonFP_pxp200_1123.csv"))
 fp_data[, id := as.character(id)]
-
-
-# _b) ggplot -------------------------------------------------------------------
-
-ggplot(data_list$values[pathID %in% IDpaths], 
-       aes(x = year, y = value_t, col = pathID)) + 
-  geom_point(aes(size = value_t)) + 
-  geom_line(linetype = "dashed") + 
-  theme(legend.position = "none") +
-  expand_limits(x = c(1995, 2015)) +
-  geom_label_repel(aes(label = label),
-                   size = 3.5,
-                   nudge_x = 10,
-                   na.rm = TRUE)
-
-data_list$paths[pathID == "938-906"]
-
-
-
-
-# _c) animated gif ----------------------------------------
-
-
-p <- ggplot(data[industry %in% i_ind & country %in% i_count], 
-            aes(x = country, y = industry, size = value, col = value %>% log)) + 
-  geom_point() +
-  scale_size_continuous(range = c(0.1, 12)) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
-  scale_color_viridis() + 
-  labs(title = 'Year: {frame_time}') +
-  transition_time(year) +
-  ease_aes('linear')
-
-animate(p, height = 800, width = 1200, fps = 3)
-anim_save(filename = file.path(path2plot, "sectoralfp_706_3fps.gif"))
-
+fp_data[value > 0]
+fp_data2 <- fread(file.path(path2temp_results, 
+                            paste0("sectoralFP_byLayer_", 
+                                   paste(ids_stressor, collapse = "."),  
+                                   "_pxp200_", id_sector, ".csv") ))
+fp_data2[, sum(value), by = country_name] %>% 
+  ggplot(aes(y = country_name, x = V1)) +
+  geom_point()
+fp_data[value > 0, sum(value), by = country_name] %>% 
+  ggplot(aes(y = country_name, x = V1)) +
+  geom_point()
 
 # _d) networkD3 ----------------------------------------------------------------
 library(networkD3)
 # __i. settings -----------------------------------------------
-iyear <- 2007
+iyear <- 2016
 irank <- 40
-ipaths <- data_list$values[, mean(value_t), by = .(pathID)][V1 > 0.005 * sum(V1)]$pathID 
+sankey <- sankeySPA(data_list, 2016, 40)
+# begin test 
+data_list
+# end test
+
+
+
+ipaths <- data_list$values[, mean(value_t), 
+                           by = .(pathID)][V1 > 0.005 * sum(V1)]$pathID 
 
 # __ii. data preparation --------------------------------------
 data <- data_list$values[year == iyear & rank < irank]
@@ -174,8 +182,17 @@ max_order <- data[, max(order)]
 
 # aggregate all small flows
 temp <- data_list$values[rank > irank & order <= max_order, 
-                         sum(value_t), 
+                         sum(value_t, na.rm = TRUE), 
                          by = .(order, year)]
+# temp <- fp_data2[, sum(value), by = .(layer, year)] %>% 
+#   setnames(c("order", "year", "V1")) %>%
+#   .[] %>% 
+#   merge(temp, ., by = c("order", "year")) %>% 
+#   .[, "V1" := V1.x + V1.y] %>%
+#   .[, V1.x := NULL] %>% 
+#   .[, V1.y := NULL] %>% 
+#   .[]
+
 temp[, "pathID" := lapply(temp$order, function(x) {
   x <- c(rep("9999-", x)) 
   x[length(x)] <- id_sector
@@ -184,6 +201,26 @@ temp[, "pathID" := lapply(temp$order, function(x) {
 setnames(temp, "V1", "value_t")
 temp[, pathID := as.character(pathID)]
 data <- rbindlist(list(data, temp[year == iyear]), use.names = TRUE, fill = TRUE)
+
+# merge(temp, fp_data2
+# test <- merge(data_list$values[year == year, sum(value_t), by = .(order)], 
+# fp_data2[year == year, sum(value), by = .(layer)],
+# by.x = "order", by.y = "layer")
+# test[, V1.x / V1.y]
+# iodata <- readRDS(file.path(path2exiobase, 
+#                             "IOT_2016_pxp", 
+#                             "EB3_table_full.RData"))
+# calc_footprint_sector(iodata$L %>% as.matrix, 
+#                       iodata$S[ids_stressor,] %>% colSums %>% 
+#                         matrix(., nrow = 1), 
+#                       y_vec = iodata$Y %>% rowSums, 
+#                       index = id_sector, detailed = TRUE)
+# 
+# S <- iodata$S[ids_stressor,] %>% colSums %>% 
+#   matrix(., nrow = 1) 
+# .calc.sector.fp.indirect(S, iodata$L %>% as.matrix, 
+#                          iodata$x %>% unlist, id_sector)
+# 
 
 # ___define links ------------------------------------
 links2 <- lapply(data$pathID, function(x) {
@@ -231,14 +268,16 @@ nodes2 <- data.table("id" = links2[, c("source", "target")] %>%
 nodes2[, "industry" := lapply(nodes2$id, function(x) {
   x %>% path_extract %>% .[2]
 }) %>% as.character]
-nodes2 <- merge(nodes2, fp_data[year == iyear, c("id", "value")], 
-                by.x = "industry", by.y = "id",
-                all.x = TRUE)
-setnames(nodes2, "value", "total")
+# nodes2 <- merge(nodes2, fp_data[year == iyear, c("id", "value")], 
+#                 by.x = "industry", by.y = "id",
+#                 all.x = TRUE)
+# setnames(nodes2, "value", "total")
+#setnames(nodes2, "value")
 nodes2[, "no" := 0:(.N-1)]
 nodes2[, "layer" := substr(id, 1,1) %>% as.factor]
 nodes2[, "group" := ifelse(industry == 0, "void", "nonvoid")] #as.character(layer)
-
+nodes2[group == "nonvoid", group := as.character(industry)]
+nodes2[, group := as.factor(group)]
 # adjust links
 links2 <- merge(links2, nodes2[, c("id", "no")], 
                 by.x = "source", by.y = "id", all.x = TRUE)
@@ -252,29 +291,31 @@ links2[zero_path == "yes", group := 0 %>% as.factor]
 
 
 # ___ color settings -----------------------------------------------
-my_color <- 'd3.scaleOrdinal().range([ "#3182bd", "white",
-,"#6baed6"
-,"#9ecae1"
-, "#c6dbef"
-, "#e6550d"
-, "#fd8d3c"
-, "#fdae6b"
-, "#fdd0a2"
-, "#31a354"
-, "#74c476"
-, "#a1d99b"
-, "#c7e9c0"
-, "#756bb1"
-, "#9e9ac8"
-, "#bcbddc"
-, "#dadaeb"
-, "#636363"
-, "#969696"
-, "#bdbdbd"
-, "#d9d9d9"
-])' # TODO extend the colors (still less colours than flows)
 
-#my_color <- JS("d3.scaleOrdinal(d3.schemeCategory20c);")
+setorderv(links2, "group", order = -1L)
+#setorderv(nodes2, "group", order = -1L)
+
+my_color <- paste0('d3.scaleOrdinal().range(["white","grey","',
+                   paste0(substr(viridis(links2$group %>%
+                                           unique %>% 
+                                           length -2),
+                                 1, 7), 
+                          collapse = '", "'), 
+                   '", "white", "grey","', 
+                   paste0(substr(viridis(nodes2$group %>%
+                                           unique %>% 
+                                           length -2),
+                                 1, 7), 
+                          collapse = '", "'),
+                   '"])')
+
+# cat(my_color)
+#  col <- viridis(links2$group %>%
+#  unique %>% 
+#   length -1)
+#  plot(1:length(col), col = col, pch = 16, cex = 5)
+
+
 nodes2[industry == 0, id := NA]
 
 # __iii) plot -------------------------------------------------------- 
@@ -283,11 +324,16 @@ network <- sankeyNetwork(Links = links2, Nodes = nodes2,
                          Value = "value", NodeID = "id",
                          fontSize= 12, nodeWidth = 30, 
                          LinkGroup = "group",
-                         NodeGroup = "group", colourScale = my_color)
+                         NodeGroup = "group", 
+                         colourScale = my_color)
 network
+
 saveNetwork(network, 
             file = file.path(path2plot, 
-                             paste0("sankey", id_sector, "_", iyear, ".html")))
+                             paste0("sankey", 
+                                    paste(ids_stressor, collapse = "."),
+                                    "_", id_sector, "_", 
+                                    iyear, ".html")))
 
 
 

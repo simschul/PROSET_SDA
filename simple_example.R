@@ -91,10 +91,38 @@ IO_calculator(A = mrio1$A, S = mrio1$S, Y = mrio1$Y)
 IO_calculator(A = mrio2$A, S = mrio2$S, Y = mrio2$Y)
 
 
+# 3. run 
+table <- readRDS(file = file.path(path2temp_results, "IO_example.RData"))
+S <- table$year0$S
+L <- table$year0$L
+A <- table$year0$A
+Y <- table$year0$Y
+x <- calculate_x(Y = Y, L = L)
+F_total <- S %*% L
+F_total2 <- S0 %*% L
 
+yz <- c(0,2,0,0)
+F_total2 %*% yz
+as.numeric(F_total2) %*% diag(yz)
+test <- (S %*% diag((L %*% yz) %>% as.numeric))
+sum(test) - 82
+S0 <- S
+S0[2] <- 0
+test2 <- (S0 %*% diag((L %*% yz) %>% as.numeric))
 
+sum(test2)
 
-
-
-
+system.time(test <- sectorSPA(sector = 2, n = 30, x = x[2], 
+                      S = S %>% as.numeric, A = A, 
+                      F_total = F_total2 %>% as.numeric, 
+                      tolSubtree = 20, 
+                      tolWrite = 0.1))
+res <- fread("example.txt")
+resid <- fread("resid.txt")
+sum1 <- sum(res$value)
+sum2 <- sum(resid$V1)
+sum1 + sum2
+max(resid$V1)
+res[,max(value)]
+calc_footprint_sector(L, S, Y, 2, detailed = FALSE)
 # THE END ---------------------------------------------------------------------

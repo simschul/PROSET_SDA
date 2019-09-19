@@ -93,6 +93,7 @@ tol2write <- 1E5
 n_layers <- 9
 for(iyear in years) {
   cat(iyear, "\n")
+  
   S <- fread(file.path(path2exiobase, paste0("S_", iyear, ".csv"))) %>%
     .[ids_stressor,] %>% as.matrix %>% colSums(na.rm = TRUE) %>% 
     matrix(nrow = 1)# only CO2 emissions
@@ -103,6 +104,9 @@ for(iyear in years) {
   
   x <- calculate_x(L = L, Y = Y) %>% as.numeric
   F_total <- S %*% L
+  
+  
+  
   
   system.time(sectorSPA(sector = id_sector, n = n_layers, x = x[id_sector], 
                         S = S, A = A, F_total = F_total, 
@@ -115,7 +119,94 @@ for(iyear in years) {
   cat("\n End: ", Sys.time(), "\n")
 }
 
+# 4. With  pxp200 EB3 version 3.6 -------------------
 
+
+
+path2model_results <- (file.path(path2temp_results, 
+                                 paste0(Sys.time(), 
+                                        "_",
+                                        paste(ids_stressor, 
+                                              collapse = "."), 
+                                        "_",
+                                        id_sector,
+                                        "_SPA")))
+dir.create(path2model_results)
+file.copy(from = c("./settings.R", "./functions.R", 
+                   "SPA_functions.cpp", "SPA_recursive.cpp", 
+                   "01_Run_SPA_sector.R"), 
+          to = path2model_results)
+
+# find a reasonable tolerance threshold
+test <- calc_footprint_sector(L, S, Y, id_sector, TRUE)
+1E5 / test$indirect # 0.0016
+
+tol_subtree <- 2E8  #0.0016 * test$indirect # 2E8
+tol2write <- 8E-07 * test$indirect  # 1E5
+n_layers <- 8
+
+# begin test
+dt <- data.table("S" = S %>% as.numeric, 
+                 EB3_metadata$colnames200)
+setorderv(dt, "S", order = -1L)
+dt[S > 0.001 * sum(S)] %>% 
+  ggplot(data = ., aes(x = id, y = S, col = country_name)) + 
+  geom_point()
+plot(S %>% as.numeric)
+# end
+iyear <- 2016
+for(iyear in years) {
+  cat(iyear, "\n")
+  ipath <- file.path(path2exiobase, "V3.6", "constant_prices",
+                     paste0("IOT_", iyear, "_pxp"))
+  S <- fread(file.path(ipath, "S.txt")) %>%
+    .[ids_stressor,] %>% as.matrix %>% colSums(na.rm = TRUE) %>% 
+    matrix(nrow = 1)# only CO2 emissions
+  L <- fread(file.path(ipath, "L.txt")) %>% as.matrix
+  A <- fread(file.path(ipath, "A.txt")) %>% as.matrix
+  Y <- fread(file.path(ipath, "Y.txt"), select = ids_fd) %>% 
+    as.matrix %>% rowSums
+  
+  x <- calculate_x(L = L, Y = Y) %>% as.numeric
+  
+  
+  F_total <- S %*% L
+  
+  system.time(sectorSPA(sector = id_sector, n = n_layers, x = x[id_sector], 
+                        S = S, A = A, F_total = F_total, 
+                        tolSubtree = tol_subtree, 
+                        tolWrite = tol2write, 
+                        file = file.path(path2model_results, 
+                                         paste0("SPAsector", id_sector, "_", 
+                                                iyear, "_RAW.txt"))))
+  
+  
+  cat("\n End: ", Sys.time(), "\n")
+}
+
+
+totalpxp <- S %*% L %*% Y
+
+S2 <- fread(file.path(path2exiobase, paste0("S_", iyear, ".csv"))) %>%
+  .[ids_stressor,] %>% as.matrix %>% colSums(na.rm = TRUE) %>% 
+  matrix(nrow = 1)# only CO2 emissions
+L2 <- fread(file.path(path2exiobase, paste0("L_", iyear, ".csv"))) %>% as.matrix
+Y2 <- fread(file.path(path2exiobase, paste0("Y_", iyear, ".csv")), select = ids_fd) %>%
+  as.matrix %>% rowSums
+totalixi <- S %*% L %*% Y
+Y2[906] / Y[id_sector]
+dim(L)
+plot(L[, id_sector] %>% log, L2[, 906] %>% log)
+abline(b = 1, a = 0, col = "red")
+sum(Y2) / sum(Y)
+
+fp_p<- calc_footprint_sector(L, S, Y, id_sector, detailed = F)
+fp_i <- calc_footprint_sector(L2, S2, Y2, 906, detailed = F)
+
+
+lapply(1:length(fp_p), function(x) {
+  (fp_p[[x]] - fp_i[[x]]) / fp_i[[x]]
+})
 
 
 # THE END ---------------------------------------------------------------------

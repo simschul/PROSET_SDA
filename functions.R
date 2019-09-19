@@ -34,9 +34,152 @@ combine_words_regexp <- function(words) {
 }
 
 
+sankeySPA <- function(data.list, iyear, irank, show.agg.flows = FALSE) {
+  # data.list <- data_list
+  # iyear <- 2007
+  # irank <- 50
+  
+  # __i. settings -----------------------------------------------
+  ipaths <- data.list$values[, mean(value_t), 
+                             by = .(pathID)][V1 > 0.005 * sum(V1)]$pathID 
+  
+  # __ii. data preparation --------------------------------------
+  data <- data.list$values[year == iyear & rank < irank]
+  max_order <- data[, max(order)]
+  
+  if (show.agg.flows) {
+    # aggregate all small flows
+    temp <- data.list$values[rank > irank & order <= max_order, 
+                             sum(value_t, na.rm = TRUE), 
+                             by = .(order, year)]
+    temp[, "pathID" := lapply(temp$order, function(x) {
+      x <- c(rep("9999-", x)) 
+      x[length(x)] <- id_sector
+      paste0(x, collapse = "")
+    })]
+    setnames(temp, "V1", "value_t")
+    temp[, pathID := as.character(pathID)]
+    data <- rbindlist(list(data, temp[year == iyear]), use.names = TRUE, fill = TRUE)  
+  }
+  
+  # ___define links ------------------------------------
+  links2 <- lapply(data$pathID, function(x) {
+    x <- x %>% path_extract %>% as.character %>% 
+      paste0( length(.):1, "-", .)
+    if(length(x) < max_order) {
+      # for graphical reasons: add "zero-flows" to all paths that are shorter than the longest one
+      xnew <- vector(mode = "character", length = max_order-length(x)) 
+      for(i in 1:length(xnew)) {
+        xnew[i] <- paste0(max_order-i+1, "-0") 
+      }
+      x <- append(x, xnew, after = 0)  
+    }
+    n <- ifelse(length(x) == 2, 2, length(x)-1)
+    res <- matrix(0, nrow = n, ncol = 2) %>% as.data.frame
+    for(i in 1:n) {
+      res[i,] <- x[c(i,i+1)]
+    }
+    return(res)
+  }) %>% 
+    setNames(data$pathID) %>% 
+    rbindlist(idcol = "pathID") %>% 
+    na.omit %>% 
+    # add direct emission flows
+    rbind(., data.table("pathID" = id_sector %>% as.character, 
+                        "V1" = paste0("1-", id_sector),
+                        "V2"= paste0("1-", id_sector))) %>% 
+    merge(., data[, c("pathID", "value_t")], by = "pathID")
+  
+  setnames(links2, c("V1", "V2", "value_t"), c("source", "target", "value"))  
+  setcolorder(links2, c("source", "target", "value", "pathID"))
+  
+  links2[, "zero_path" := sapply(links2$source, function(x){
+    x <- x %>% path_extract 
+    ifelse(x[2] == 0, "yes", "no")
+  })] 
+  links2[zero_path == "yes", value := 0.001]
+  
+  
+  # ___define nodes --------------------------------------------------
+  nodes2 <- data.table("id" = links2[, c("source", "target")] %>% 
+                         unlist %>% 
+                         unique %>% 
+                         as.character())
+  nodes2[, "industry" := lapply(nodes2$id, function(x) {
+    x %>% path_extract %>% .[2]
+  }) %>% as.character]
+  # nodes2 <- merge(nodes2, fp_data[year == iyear, c("id", "value")], 
+  #                 by.x = "industry", by.y = "id",
+  #                 all.x = TRUE)
+  # setnames(nodes2, "value", "total")
+  #setnames(nodes2, "value")
+  nodes2[, "no" := 0:(.N-1)]
+  nodes2[, "layer" := substr(id, 1,1) %>% as.factor]
+  nodes2[, "group" := ifelse(industry == 0, "void", "nonvoid")] #as.character(layer)
+  nodes2[group == "nonvoid", group := as.character(industry)]
+  nodes2[, group := as.factor(group)]
+  # adjust links
+  links2 <- merge(links2, nodes2[, c("id", "no")], 
+                  by.x = "source", by.y = "id", all.x = TRUE)
+  setnames(links2, c("source", "no"), c("sourceID", "source"))
+  links2 <- merge(links2, nodes2[, c("id", "no")], 
+                  by.x = "target", by.y = "id", all.x = TRUE)
+  setnames(links2, c("target", "no"), c("targetID", "target"))
+  links2[, "group" := sapply(links2$pathID, 
+                             function(x) path_extract(x)[1] %>% as.factor)]
+  links2[zero_path == "yes", group := 0 %>% as.factor]
+  
+  
+  # ___ color settings -----------------------------------------------
+  setorderv(links2, "group", order = -1L)
+  #setorderv(nodes2, "group", order = -1L)
+  
+  my_color <- paste0('d3.scaleOrdinal().range(["white","grey","',
+                     paste0(substr(viridis(links2$group %>%
+                                             unique %>% 
+                                             length -2),
+                                   1, 7), 
+                            collapse = '", "'), 
+                     '", "white", "grey","', 
+                     paste0(substr(viridis(nodes2$group %>%
+                                             unique %>% 
+                                             length -2),
+                                   1, 7), 
+                            collapse = '", "'),
+                     '"])')
+  
+  # change labels of nodes 
+  nodes2$id <- lapply(nodes2$id, function(x) {
+    x <- path_extract(x)
+    temp <- EB3_metadata$colnames200[id == x[2]]
+    return(paste0(x[1], "-", temp$country_code2, temp$product200_code))
+  }) %>% 
+    unlist %>% as.data.table
+  
+  nodes2[industry == 0, id := NA]
+  
+  # __iii) plot -------------------------------------------------------- 
+  network <- sankeyNetwork(Links = links2, Nodes = nodes2,
+                           Source = "source", Target = "target",
+                           Value = "value", NodeID = "id",
+                           fontSize= 11, nodeWidth = 30, 
+                           LinkGroup = "group",
+                           NodeGroup = "group", 
+                           colourScale = my_color)
+  network
+  return(network)
+}
+
+
+#sankeySPA(data_list, 1995, 60, T)
 
 
 # 1. Basic IO functions --------------------------------------------------------
+read_EB3_A <- function(path) {
+  data.table::fread(path, skip = 3, drop = c(1,2)) %>% 
+    as.matrix  
+}
+
 calculate_x <- function(Z, Y, va, L) {
   if(!is.null(dim(Y))) Y <- apply(Y, 1, sum) # if Y is matrix
   if(missing(L)) {
