@@ -1,6 +1,11 @@
 # load packages ---------------------------------------------------------------
-#devtools::install_github("simschul/my.utils", upgrade = "never")
-#.rs.restartR()
+install_myutils <- readline("Should my.utils be installed from scratch? 
+                            Type Y or N. May take a while... \n")
+if(install_myutils %in% c("Y", "y", "yes", "Yes")) {
+    devtools::install_github("simschul/my.utils", upgrade = "never")
+    .rs.restartR()    
+}
+rm(install_myutils)
 library(my.utils)
 library(data.table)
 library(tidyverse)

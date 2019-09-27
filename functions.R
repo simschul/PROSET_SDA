@@ -615,8 +615,8 @@ extract_selected_1L <- function(list, indices) {
 
 delta_IO <- function(x0, x1) {
   lapply(1:length(x0), function(x) {
-  return(x1[[x]] - x0[[x]])
-}) %>% setNames(names(x0))
+    return(x1[[x]] - x0[[x]])
+  }) %>% setNames(names(x0))
 }
 
 
@@ -642,7 +642,7 @@ mat2dt <- function(mat, exclude.zeros = FALSE, exclude.na = FALSE) {
   # zero.handling <- FALSE
   # aggregate <- TRUE
   # parallel <- FALSE
-   
+  
   n.comp <- length(year0)
   indices <- get_indices(year0)
   vars <- lapply(indices, function(x) 1:x) %>% 
@@ -652,47 +652,47 @@ mat2dt <- function(mat, exclude.zeros = FALSE, exclude.na = FALSE) {
     lapply(., function(x) array(dim = indices))
   if(!parallel) {
     for(j in 1:nrow(vars)) {
-    inds <- vars[j,] %>% as.numeric # combinations of coefficients
-    y0 <- extract_selected(year0, inds) %>% prod
-    y1 <- extract_selected(year1, inds) %>% prod
-    
-    if(zero.handling & (y0 == 0 | y1 == 0)) {
-      # zero-value handling (as suggested in Wood & Lenzen 2006)
-      # TODO: check again if it really does what it is supposed to
-      if(y0 == 0 & y1 == 0) {
-        res <- 0
-      } else if (y0 == 0) {
-        for(i in 1:n.comp) {
-          x0 <- year0[[i]][inds[i], inds[i+1]]
-          if(x0 == 0) {
-            res <- y1
-          } else {
-            res <- 0
-          }
-          decomp[[i]][matrix(inds, ncol = length(inds))] <- res
-        }
-      } else if (y1 == 0) {
-        for(i in 1:n.comp) {
-          x1 <- year1[[i]][inds[i], inds[i+1]]
-          if(x1 == 0) {
-            res <- -y0
-          } else {
-            res <- 0
-          }
-          decomp[[i]][matrix(inds, ncol = length(inds))] <- res
-        }
-      }
+      inds <- vars[j,] %>% as.numeric # combinations of coefficients
+      y0 <- extract_selected(year0, inds) %>% prod
+      y1 <- extract_selected(year1, inds) %>% prod
       
-    } else {
-      # neither y0, y1, x0, x1 are zero OR zero.handling == FALSE
-      y_log_mean <- log_mean(x = y1, 
-                             y = y0)
-      for(i in 1:n.comp) {
-        x_log <- log(year1[[i]][inds[i], inds[i+1]] / year0[[i]][inds[i], inds[i+1]])
-        decomp[[i]][matrix(inds, ncol = length(inds))] <- y_log_mean * x_log
-      }  
+      if(zero.handling & (y0 == 0 | y1 == 0)) {
+        # zero-value handling (as suggested in Wood & Lenzen 2006)
+        # TODO: check again if it really does what it is supposed to
+        if(y0 == 0 & y1 == 0) {
+          res <- 0
+        } else if (y0 == 0) {
+          for(i in 1:n.comp) {
+            x0 <- year0[[i]][inds[i], inds[i+1]]
+            if(x0 == 0) {
+              res <- y1
+            } else {
+              res <- 0
+            }
+            decomp[[i]][matrix(inds, ncol = length(inds))] <- res
+          }
+        } else if (y1 == 0) {
+          for(i in 1:n.comp) {
+            x1 <- year1[[i]][inds[i], inds[i+1]]
+            if(x1 == 0) {
+              res <- -y0
+            } else {
+              res <- 0
+            }
+            decomp[[i]][matrix(inds, ncol = length(inds))] <- res
+          }
+        }
+        
+      } else {
+        # neither y0, y1, x0, x1 are zero OR zero.handling == FALSE
+        y_log_mean <- log_mean(x = y1, 
+                               y = y0)
+        for(i in 1:n.comp) {
+          x_log <- log(year1[[i]][inds[i], inds[i+1]] / year0[[i]][inds[i], inds[i+1]])
+          decomp[[i]][matrix(inds, ncol = length(inds))] <- y_log_mean * x_log
+        }  
+      }
     }
-  }
     
   } else {
     vars <- lapply(1:nrow(vars), function(x) vars[x,] %>% as.numeric)
@@ -828,6 +828,119 @@ mat2dt <- function(mat, exclude.zeros = FALSE, exclude.na = FALSE) {
 # 
 
 
+#' Title
+#'
+#' @param mat 
+#' @param threshold 
+#' @param maxpoints 
+#' @param cex 
+#' @param attributes 
+#' @param ... 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#' 
 
+IOvisualize <- function(mat, threshold, maxpoints = 1E4, 
+                        cex = "absolut", attributes, 
+                        colnames = NA, rownames = NA,  ...) {
+  # TODO: include color scales to visulize < and > 0
+  if (maxpoints > (ncol(mat) * nrow(mat))) {
+    min_threshold <- 0
+  } else {
+    suppressWarnings(min_threshold <- mat %>%
+                       abs %>% 
+                       fsort(., decreasing = TRUE, na.last = TRUE) %>%
+                       .[maxpoints])  
+  }
+  if (missing(threshold)) {
+    threshold <- min_threshold
+  } 
+  if (min_threshold > threshold) {
+    warning(paste0("maxpoints = ", maxpoints, " reached: ", 
+                   "threshold taken to ", min_threshold))
+    threshold <- min_threshold
+  }
+  
+  mat[mat < threshold & mat > -threshold] <- NA
+  
+  res <- mat %>% as.sparse.matrix 
+  if (!missing(attributes)) {
+    if (sum(c("row", "col") %in% colnames(attributes)) != 2) {
+      warning("attributes needs to have both arguments col and row!")
+    }
+    res <- merge(res, attributes[, -"col"], by = "row", 
+                 suffixes = c(".row", ".col")) %>% 
+      merge(., attributes[, -"row"], by = "col", 
+            suffixes = c(".row", ".col"))
+  }
+  
+  if (missing(colnames)) colnames <- colnames(mat)
+  if (missing(rownames)) rownames <- rownames(mat)
+  colnames <- data.table(col = 1:length(colnames), 
+                         col.names = colnames)
+  rownames <- data.table(row = 1:length(rownames), 
+                         row.names = rownames)
+  res <- merge(res, colnames, by = "col") %>% 
+    merge(., rownames, by = "row")
+  res <- res %>% 
+    .[, row := -row] %>% 
+    st_as_sf(coords = c("col", "row"), 
+             remove = FALSE) 
+  res$row <- -res$row
+  if (cex == "absolut") {
+    res[["abs_value"]] <- abs(res$value)
+    cex <- "abs_value"
+  } else if (cex == "increasing") {
+    cex <- "value"
+  } else if (cex == "decreasing") {
+    res[["dec_value"]] <- -(res$value)
+    cex <- "dec_value"
+  }
+  mapview::mapview(res, alpha = 0.3, lwd = 0, cex = cex, 
+          color = (viridis), zcol = "value", ...)
+}
+
+#' Title
+#'
+#' @param mat 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+
+as.sparse.matrix <- function(mat) {
+  mat <- data.table::as.data.table(mat)
+  colnames(mat) <- paste0(1:ncol(mat))
+  mat <- mat[, row := 1:.N] 
+  mat <- data.table::melt(mat, id.vars = "row", na.rm = TRUE, 
+                     variable.name = "col") %>% 
+    .[, col := col %>% as.integer] %>% 
+    .[]
+  return(mat)
+}
+
+#' Title
+#'
+#' @param xy 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+point2polygon <- function (xy) {
+  x <- c(xy[1]-1, xy[1])
+  y <- c(xy[2]-1, xy[2])
+  poly <- matrix(c(x[1],y[1],
+                   x[1],y[2],
+                   x[2],y[2],
+                   x[2],y[1],
+                   x[1],y[1]), 
+                 nrow = 5, byrow = TRUE)
+  return(st_polygon(list(poly)))
+}
 
 # End --------------------------------------------------------------------------

@@ -65,18 +65,14 @@ imp_shares <- array(dim = c(200,49,200,49),
                                     EB3_metadata$regions$country_code2, 
                                     EB3_metadata$pxp200$product200_name,
                                     EB3_metadata$regions$country_code2)) 
-i <- 1
-j <- 1
 for (i in 1:dim(imp_shares)[1]) {
   for (j in 1:dim(imp_shares)[4]) {
     z <- Za[i,,,j]
     z[j,] <- 0
     z <- apply(z, 2, function(x) x / sum(x, na.rm = TRUE)) 
     imp_shares[i,,,j] <- z  
-    }
+  }
 }
-for(i in 1:10) imp_shares[i,,,6] %>% barplot(col = viridis(49), border = viridis(48))
-apply(imp_shares)
 
 colsums <- vector("numeric", 200)
 for(i in 1:200) colsums[i] <- imp_shares[i,,,6] %>% apply(., 1, sd, na.rm = TRUE) 
@@ -86,39 +82,61 @@ imp_shares[13,,,6] %>% barplot(col = viridis(49), border = viridis(49),
 
 
 ######
-Tmat <- matrix(0, nrow = 200, ncol = 9800)
-
-
-i <- 6
-for(i in 1:ncol(iprod)) {
-
-  icountry <- (((i:(i+1))-1)*200) + 1
-  # calculate imports of one product in one country by sector
-  zi <- Z[iprod[,i], icountry[1]:(icountry[2]-1)]
-  dim(Tmat)
-  zi <- apply(zi, 2, function(x) x / sum(x, na.rm = TRUE))
-  zi[is.na(zi)] <- 0
-  zi[is.nan(zi)] <- 0
-  
-  barplot(zi, col = viridis(49))
-  Tmat[, icountry[1]:(icountry[2]-1)] %>% dim
-  Tmat[, icountry[1]:(icountry[2]-1)] <- zi / sum(zi, na.rm = TRUE)
-}
-
-Tmat %>% raster %>% plot
-
-#dim(Tmat)
-ids_GER <- EB3_metadata$colnames200[country_name == "Netherlands"]$id
-barplot(Tmat[, ids_GER], col = viridis(48), border = viridis(48), 
-        names.arg = EB3_metadata$pxp200$id, 
-        las = 2, cex.names = 0.4)
-Tmat[, ids_GER] %>% apply(., 1, sd, na.rm = TRUE)
-
-
 
 ```
 
-And truly every sector imports steel with the exactly same import mix.  
+With the IO pxp tables the import shares are not present any more. So lets have a look at the SUTs. 
+
+# SUTs
+
+Load the tables: 
+```{r}
+path2sut <- file.path(path2exiobase, "MRSUT_2011")
+sut <- readRDS(file.path(path2sut, "SUT.RData"))
+```
+
+
+```{r}
+dim(sut$U) # product X industry (which products are used in which industries?)
+U <- array(sut$U, dim = c(200,49,163,49), 
+           dimnames = list(EB3_metadata$pxp200$product200_code, 
+                           EB3_metadata$regions$country_code2,
+                           EB3_metadata$pxp163$product163_code, 
+                           EB3_metadata$regions$country_code2))
+
+imp_shares <- array(dim = c(200,49,163,49), 
+                    dimnames = list(EB3_metadata$pxp200$product200_name,
+                                    EB3_metadata$regions$country_code2, 
+                                    EB3_metadata$pxp200$product163_name,
+                                    EB3_metadata$regions$country_code2))
+i <- j <- 6
+for (i in 1:dim(imp_shares)[1]) {
+  for (j in 1:dim(imp_shares)[4]) {
+    z <- U[i,,,j]
+    z[j,] <- 0
+    z <- apply(z, 2, function(x) x / sum(x, na.rm = TRUE)) 
+    imp_shares[i,,,j] <- z  
+  }
+  cat(i, "")
+}
+imp_shares[is.nan(imp_shares)] <- NA
+#imp_shares <- round(imp_shares, 4)
+
+colsums <- vector("numeric", 200)
+i <- 197
+for(i in 1:200) colsums[i] <- imp_shares[i,,,6] %>% apply(., 1, zero_range) %>% zero_range
+which(colsums == min(colsums, na.rm = T))
+
+data <- imp_shares[3,,,6][,!is.na(imp_shares[3,,,6]) %>% colSums]
+data %>% apply(., 1, zero_range, tol = 1E-4) %>% zero_range
+
+barplot(data, col = viridis(49), border = viridis(49), las = 2, cex.names = 0.4)
+
+```
+
+
+
+
 
 # What can be done about it?
 
@@ -151,14 +169,16 @@ flows[, mean(value.dest), by = dest]
 library(gtools)
 # origin
 a <- 3.5
-b <- 2.1
-c <- 4.4
+b <- 0.01
+#b <- 2.1
+c <- 6.49
 n_origin <- 3
 origin_vec <- c(a, b, c) 
 names(origin_vec) <- c("a", "b", "c")
 # destination
 A <- 1.3
-B <- 3.6
+A <- 0.01
+B <- 4.89
 C <- 2.7
 D <- 2.4
 n_dest <- 4
@@ -169,7 +189,7 @@ dest[, "cumsum" := cumsum(value)]
 
 
 N <- 50
-n_iter <- 500
+n_iter <- 100
 set.seed(123)
 i <- 1
 list <- create_named_list(1:n_iter)
@@ -205,12 +225,13 @@ for(i in 1:n_iter) {
   for(j in unique(dest$group)) {
     if (!(dest[group == j]$cumsum %in% data$cumsum)) {
       temp <- dest[group == j]$cumsum
+      irow <- data[cumsum < temp] %>% nrow
       ibin <- c(0,data[cumsum < temp]$bin) %>% max 
-      newbin <- data.table(origin = data[bin == ibin+1]$origin, 
+      newbin <- data.table(origin = data[irow + 1,]$origin, 
                            value = dest[group == j]$cumsum - 
                              ifelse(length(data[bin == ibin]$cumsum) == 0, 
                                     0, data[bin == ibin]$cumsum), 
-                           bin = ibin + 0.5, 
+                           bin = ibin + 0.001, 
                            cumsum = dest[group == j]$cumsum)
       data[bin == ibin+1, value := value - newbin$value]
       data <- rbind(data, newbin) %>% 
@@ -232,10 +253,223 @@ for(i in 1:n_iter) {
   cat(i, "")
 }
 
+lapply(list, function(x) x[, sum(value)])
+```
+
+# function 
+ll that into a function: 
+```{r}
+randomize_flows <- function(origin_vec, dest, N, n_iter) {
+  # N <- 50
+  # n_iter <- 500
+  # set.seed(123)
+  
+  # i <- 1
+  # origin_vec <- orig
+  origin_vec <- origin_vec[origin_vec != 0]
+  # dest <- dest_dt
+  origin_sum <- sum(origin_vec)
+  dest_sum <- sum(dest$value)
+  if (origin_sum != dest_sum) stop("origin does not equal destination flows")
+  list <- create_named_list(1:n_iter)
+  
+  length_out <- min(origin_vec) / nrow(dest)
+  for(i in 1:n_iter) {
+    
+    # split each import flow into N random sized bins  
+    data <- lapply(origin_vec, function(x) {
+      runif(x/length_out, min = 0, max = x) %>%
+        sort %>%
+        c(0,.,x) %>%
+        diff %>%
+        as.data.table %>%
+        setnames("value")
+    }) %>% setNames(names(origin_vec)) %>%
+      rbindlist(idcol = "origin")
+    data[, sum(value)] == origin_sum
+    
+    # assign random numbers to each bin 
+    data[, "bin" := sample((1:.N), replace = FALSE)]
+    setorder(data, bin)
+    data[, "cumsum" := cumsum(value)]
+    
+    data[.N]$cumsum == origin_sum
+    # split those flows directly at the border between two destinations
+    for(j in unique(dest$group)) {
+      if (!(dest[group == j]$cumsum %in% data$cumsum)) {
+        temp <- dest[group == j]$cumsum
+        irow <- data[cumsum < temp] %>% nrow
+        ibin <- c(0,data[cumsum < temp]$bin) %>% max 
+        newbin <- data.table(origin = data[irow + 1,]$origin, 
+                             value = dest[group == j]$cumsum - 
+                               ifelse(length(data[bin == ibin]$cumsum) == 0, 
+                                      0, data[bin == ibin]$cumsum), 
+                             bin = ibin + 0.001, 
+                             cumsum = dest[group == j]$cumsum)
+        data[irow + 1, value := value - newbin$value]
+        data <- rbind(data, newbin) %>% 
+          setorder(bin)    
+      }
+    }
+    data[, sum(value)] == origin_sum
+    
+    data[, "dest" := ""]
+    for (j in rev(unique(dest$group))) {
+      temp <- dest[group == j]$cumsum
+      data[cumsum <= temp, dest := j]
+    }
+    data_agg <- data[, sum(value), by = .(origin, dest)] %>% 
+      setnames("V1", "value")
+    
+    
+    rm(data)
+    gc()
+    data_agg[, "prop" := value / sum(value), by = dest]
+    list[[i]] <- data_agg
+    cat(i, "")
+  }
+  return(list)
+}
+test <- randomize_flows(origin_vec, dest = dest, n_iter = 100, 
+                        N = 50)
+lapply(test, function(x) x[, sum(prop)])
+lapply(test, function(x) x[, sum(value)])
 
 ```
 
 
+```{r}
+# begin test
+data_agg
+U[3,,,6] %>% dim # input
+iuse <- U[3,,,6][,colSums(U[3,,,6]) != 0]
+iuse[6,] <- 0
+index <- 6
+
+randomize_U <- function(x, index) {
+  # extract non zero flows
+  if (sum(x[-index,]) > 0) {
+    xnew <- x[, colSums(x) != 0]
+    xnew[index,] <- 0
+    # prepare data
+    origin_vec <- xnew %>% rowSums
+    dest_vec <- xnew %>% colSums()
+    dest_dt <- data.table(group = names(dest_vec), 
+                          value = dest_vec)
+    dest_dt[, "cumsum" := cumsum(value)]
+    origin_vec <- origin_vec[origin_vec != 0]
+    origin_sum <- sum(origin_vec, na.rm = TRUE)
+    dest_sum <- sum(dest_dt$value, na.rm = TRUE)
+    if (origin_sum != dest_sum) stop("origin does not equal 
+                                       destination flows")
+    length_out <- min(origin_vec) / nrow(dest_dt)
+    data <- lapply(origin_vec, function(x) {
+      runif(x/length_out, min = 0, max = x) %>%
+        sort %>%
+        c(0,.,x) %>%
+        diff %>%
+        as.data.table %>%
+        setnames("value")
+    }) %>% setNames(names(origin_vec)) %>%
+      rbindlist(idcol = "origin")
+    #data[, sum(value)] == origin_sum
+    
+    # assign random numbers to each bin 
+    data[, "bin" := sample((1:.N), replace = FALSE)]
+    setorder(data, bin)
+    data[, "cumsum" := cumsum(value)]
+    
+    #data[.N]$cumsum == origin_sum
+    # split those flows directly at the border between two destinations
+    #data[, "dest" := ""]
+    for(j in unique(dest_dt$group)) {
+      if (!(dest_dt[group == j]$cumsum %in% data$cumsum)) {
+        temp <- dest_dt[group == j]$cumsum
+        irow <- data[cumsum < temp] %>% nrow
+        ibin <- c(0,data[cumsum < temp]$bin) %>% max 
+        newbin <- data.table(origin = data[irow + 1,]$origin, 
+                             value = dest_dt[group == j]$cumsum - 
+                               ifelse(length(data[bin == ibin]$cumsum) == 0, 
+                                      0, data[bin == ibin]$cumsum), 
+                             bin = ibin + 0.001, 
+                             cumsum = dest_dt[group == j]$cumsum)
+        data[irow + 1, value := value - newbin$value]
+        #data[1:(irow+1)][dest == ""]$dest <- j
+        data <- rbind(data, newbin) %>% 
+          setorder(bin)    
+      }
+      #cat(j, "")
+    }
+    #data[, sum(value)] == origin_sum
+    
+    data[, "dest" := ""]
+    for (j in rev(unique(dest_dt$group))) {
+      temp <- dest_dt[group == j]$cumsum
+      data[cumsum <= temp, dest := j]
+    }
+    data <- data[, sum(value), by = .(origin, dest)] %>% 
+      setnames("V1", "value")
+    #all.equal(data_agg[, sum(value)], origin_sum)
+    
+    # data <- dcast(data, origin ~ dest)
+    # data[is.na(data)] <- 0
+    # mat <- data[,-1] %>% as.matrix
+    # colnames(mat) <- colnames(data)[-1]
+    # rownames(mat) <- data[,1] %>% unlist
+    
+    x_dt <- x %>% as.data.table(keep.rownames = TRUE) %>% 
+      melt %>% setnames(c("origin", "dest", "value"))
+    #all.equal(x_dt[origin != "DEU", sum(value)], origin_sum)
+    data <- merge(x_dt, data, 
+                  by = c("origin", "dest"), 
+                  all.x = TRUE, sort = FALSE)
+    #data_agg2[is.na(value.y) & value.x != 0]
+    
+    data[origin == rownames(x)[index], value.y := value.x]
+    data[is.na(value.y), value.y := 0]
+    # all.equal(data[origin != "DEU", sum(value.y)],origin_sum)
+    # all.equal(data[, sum(value)], origin_sum)
+    
+    new_mat <- data$value.y %>% 
+      matrix(nrow = nrow(x), ncol = ncol(x))
+    rm(data)
+    gc()
+    colnames(new_mat) <- colnames(x)
+    rownames(new_mat) <- rownames(x)
+    #all.equal(sum(new_mat), sum(x))
+    return(new_mat)  
+  } else {
+    return(x)
+  }
+  
+}
+
+# run in a loop: 
+new_U <- array(0, dim = dim(U))
+system.time({
+  for(i in 1:200) {
+    x <- U[i,,,6]
+    new_U[i,,,6] <- randomize_U(x, index = 6)
+    cat(i, "")
+  }  
+})
+
+
+
+
+sum(test)
+new_mat <- test
+
+diff <- new_mat - x
+
+IOvisualize(diff)
+reldiff <- (new_mat - x) / new_mat
+reldiff[is.nan(reldiff)] <- NA
+IOvisualize(reldiff)
+x["CYP", "p05"]
+
+sum(new_mat)
+```
 
 
 ```{r}
@@ -282,6 +516,45 @@ ggplot(data, aes(x = bin, y = cumsum)) +
 
 
 # Real life example
+```{r}
+U
+imp_shares
+ishares <- imp_shares[3,,,6][,!is.na(imp_shares[3,,,6]) %>% colSums]
+iuse <- U[3,,,6][,colSums(U[3,,,6]) != 0]
+iuse[6,] <- 0
+
+orig <- iuse %>% rowSums()
+dest_vec <- iuse %>% colSums()
+dest_dt <- data.table(group = names(dest_vec), 
+                      value = dest_vec)
+dest_dt[, "cumsum" := cumsum(value)]
+
+test2 <- randomize_flows(origin_vec = orig, 
+                         dest = dest_dt, 
+                         N = 50, n_iter = 100)
+
+lapply(test2, function(x) x[dest == "p92", sum(value)]) %>% 
+  unlist %>% var
+lapply(test2, function(x) x[origin == "SWE", sum(value)]) %>% 
+  unlist %>% var
+
+
+dt <- rbindlist(test2, idcol = "n")
+dt[, n := as.numeric(n)]
+dt[, "flow" := paste0(origin, "->", dest)]
+
+ggplot(dt) + 
+  geom_density(aes(x = value, fill = flow), 
+               alpha = 0.3)
+ggplot(dt) + 
+  geom_density(aes(x = value %>% log, fill = dest), 
+               alpha = 0.3) + 
+  facet_wrap(~origin, scales = "free")
+
+ggplot(dt) + 
+  geom_boxplot(aes(x = dest, y = prop, fill = dest))+ 
+  facet_wrap(~origin, scales = "free")
+```
 
 
 
