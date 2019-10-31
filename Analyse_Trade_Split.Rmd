@@ -345,6 +345,7 @@ U[3,,,6] %>% dim # input
 iuse <- U[3,,,6][,colSums(U[3,,,6]) != 0]
 iuse[6,] <- 0
 index <- 6
+x <- U[6,,,6]
 
 randomize_U <- function(x, index) {
   # extract non zero flows
@@ -354,15 +355,16 @@ randomize_U <- function(x, index) {
     # prepare data
     origin_vec <- xnew %>% rowSums
     dest_vec <- xnew %>% colSums()
+    dest_vec <- dest_vec[dest_vec > 0]
     dest_dt <- data.table(group = names(dest_vec), 
                           value = dest_vec)
     dest_dt[, "cumsum" := cumsum(value)]
     origin_vec <- origin_vec[origin_vec != 0]
     origin_sum <- sum(origin_vec, na.rm = TRUE)
     dest_sum <- sum(dest_dt$value, na.rm = TRUE)
-    if (origin_sum != dest_sum) stop("origin does not equal 
+    if (!all.equal(origin_sum, dest_sum)) stop("origin does not equal 
                                        destination flows")
-    length_out <- min(origin_vec) / nrow(dest_dt)
+    length_out <- min(origin_vec) / nrow(dest_dt) # min. number of flows to sample
     data <- lapply(origin_vec, function(x) {
       runif(x/length_out, min = 0, max = x) %>%
         sort %>%
@@ -372,12 +374,68 @@ randomize_U <- function(x, index) {
         setnames("value")
     }) %>% setNames(names(origin_vec)) %>%
       rbindlist(idcol = "origin")
+    gc()
     #data[, sum(value)] == origin_sum
     
     # assign random numbers to each bin 
     data[, "bin" := sample((1:.N), replace = FALSE)]
     setorder(data, bin)
     data[, "cumsum" := cumsum(value)]
+    data[, bin := NULL]
+    gc()
+    # begin test
+    data
+    j <- 106
+    new_data <- create_named_list(dest_dt$group)
+    data_between <- new_data
+    for (j in 1:nrow(dest_dt)) {
+      #irow <- data[cumsum < 0.01] %>% nrow
+      irow <- data[cumsum < dest_dt$cumsum[j]] %>% nrow 
+      if (irow == 0) {
+        temp <- copy(data[1,])
+        temp[, value := dest_dt$value[j]]
+        temp[, "cumsum" := cumsum(value)]
+        new_data[[j]] <- temp 
+        data[1, value := value - temp$value]
+      } else {
+        new_data[[j]] <- data[1:irow, 
+                              .(value = sum(value)), by = .(origin)] %>% 
+          .[, "cumsum" := cumsum(value)]  
+        if (irow < nrow(data)) {
+          data_between[[j]] <- data[irow + 1, -"bin"]
+          data <- data[(irow+2):.N]      
+        }
+      }
+      
+      gc()
+      cat(j, "")
+      if (j > 1) {
+        temp1 <- dest_dt[j-1]$value - new_data[[j-1]]$value %>% sum
+        temp2 <- data_between[[j-1]]$value - temp1
+        if(temp1 < 0 | temp2 < 0) stop("bla")
+        new_data[[j-1]] <- rbind(new_data[[j-1]],
+                                 data_between[[j-1]][, value := temp1])
+        new_data[[j]] <- rbind(data_between[[j-1]][, value := temp2],
+                               new_data[[j]])
+      }
+      
+    }
+    gc()
+    
+    dest_dt[group == "p90.5.f"]
+    plot(sapply(new_data, function(x) sum(x$value)) -dest_vec)
+    abline(h = 0, col = "red")
+    j <- 5
+    for (j in 1:(length(data_between)-1)) {
+      temp1 <- dest_dt[j]$value - new_data[[j]]$value %>% sum
+      temp2 <- data_between[[j]]$value - temp1
+      if(temp1 < 0 | temp2 < 0) stop("bla")
+      new_data[[j]] <- rbind(new_data[[j]], data_between[[j]][, value := temp1])
+      new_data[[j+1]] <- rbind(data_between[[j]][, value := temp2], new_data[[j+1]])
+    }
+    
+    # end test
+    
     
     #data[.N]$cumsum == origin_sum
     # split those flows directly at the border between two destinations
@@ -386,17 +444,19 @@ randomize_U <- function(x, index) {
       if (!(dest_dt[group == j]$cumsum %in% data$cumsum)) {
         temp <- dest_dt[group == j]$cumsum
         irow <- data[cumsum < temp] %>% nrow
-        ibin <- c(0,data[cumsum < temp]$bin) %>% max 
-        newbin <- data.table(origin = data[irow + 1,]$origin, 
-                             value = dest_dt[group == j]$cumsum - 
-                               ifelse(length(data[bin == ibin]$cumsum) == 0, 
-                                      0, data[bin == ibin]$cumsum), 
-                             bin = ibin + 0.001, 
-                             cumsum = dest_dt[group == j]$cumsum)
-        data[irow + 1, value := value - newbin$value]
-        #data[1:(irow+1)][dest == ""]$dest <- j
-        data <- rbind(data, newbin) %>% 
-          setorder(bin)    
+        if (irow < nrow(data)) {
+          ibin <- c(0,data[cumsum < temp]$bin) %>% max 
+          newbin <- data.table(origin = data[irow + 1,]$origin, 
+                               value = dest_dt[group == j]$cumsum - 
+                                 ifelse(length(data[bin == ibin]$cumsum) == 0, 
+                                        0, data[bin == ibin]$cumsum), 
+                               bin = ibin + 0.001, 
+                               cumsum = dest_dt[group == j]$cumsum)
+          data[irow + 1, value := value - newbin$value]  
+          #data[1:(irow+1)][dest == ""]$dest <- j
+          data <- rbind(data, newbin) %>% 
+            setorder(bin)
+        }
       }
       #cat(j, "")
     }
@@ -409,7 +469,6 @@ randomize_U <- function(x, index) {
     }
     data <- data[, sum(value), by = .(origin, dest)] %>% 
       setnames("V1", "value")
-    #all.equal(data_agg[, sum(value)], origin_sum)
     
     # data <- dcast(data, origin ~ dest)
     # data[is.na(data)] <- 0
@@ -543,9 +602,16 @@ dt <- rbindlist(test2, idcol = "n")
 dt[, n := as.numeric(n)]
 dt[, "flow" := paste0(origin, "->", dest)]
 
-ggplot(dt) + 
-  geom_density(aes(x = value, fill = flow), 
-               alpha = 0.3)
+# ggplot(dt) + 
+#   geom_density(aes(x = value, fill = flow), 
+# alpha = 0.3)
+dt[dest == "p15.i" & origin == "FRA"]$prop %>% hist
+
+ggplot(dt[dest == "p15.i"]) + 
+  geom_boxplot(aes(x = origin, y = prop))
+
+EB3_metadata$pxp200[grepl("vehicle", product200_name)]
+
 ggplot(dt) + 
   geom_density(aes(x = value %>% log, fill = dest), 
                alpha = 0.3) + 
@@ -555,6 +621,109 @@ ggplot(dt) +
   geom_boxplot(aes(x = dest, y = prop, fill = dest))+ 
   facet_wrap(~origin, scales = "free")
 ```
+
+
+
+
+# Alternative methods to randomly allocate flows
+
+```{r}
+library(truncnorm)
+library(gtools)
+
+product <- 104
+country <- 6
+dim(U)
+# 200 products from 49 region used in 163 industries in 49 regions
+
+create_random_import_shares <- function(U, product, country) {
+  U_subset <- U[product,,,country]
+  U_subset[country,] <- 0
+  
+  origin_vec <- U_subset %>% rowSums # imports by country of origin
+  dest_vec <- U_subset %>% colSums # imports by sector of destination
+  
+  # create new matrix to store import shares
+  new_imp_shares <- U_subset %>% replace(., values = 0)
+  randomize_flows2 <- function(origin_vec, dest_vec) {
+    originprop_vec <- origin_vec / sum(origin_vec)
+    destprop_vec <- dest_vec / sum(dest_vec)
+    flows_left <- origin_vec
+    resid <- dest_vec %>% replace(., values = 0)
+    #i <- 2
+    for (i in 1:length(dest_vec)) {
+      # draw random numbers
+      rand <- rtruncnorm(length(origin_vec),
+                         a = 0,
+                         mean = originprop_vec, 
+                         sd = originprop_vec / 2)
+      rand[is.nan(rand)] <- 0
+      rand <- rand/ sum(rand)
+      new_orig <- rand * dest_vec[i]
+      # check how much is left
+      temp <- flows_left - new_orig
+      # if not enough left, take what is left
+      new_orig[temp < 0] <- flows_left[temp < 0]
+      # redistribute the rest
+      rest <- temp[temp < 0] %>% sum %>% abs
+      resid[i] <- rest
+      
+      new_imp_shares[,i] <- new_orig
+      # update what is left
+      flows_left <- flows_left - new_orig
+      cat(i, "")
+    }
+    return(resid)
+  }
+  rest <- randomize_flows2(origin_vec, dest_vec)
+  sum(rest)
+  resid_dest <- rest
+  resid_orig <- (origin_vec - (new_imp_shares %>% rowSums()))
+  sum(resid_dest)
+  sum(resid_orig)
+  
+  new_imp_shares1 <- new_imp_shares
+  new_imp_shares <- U_subset %>% replace(., values = 0)
+
+  rest2 <- randomize_flows2(resid_orig, resid_dest)
+  sum(rest2)
+  new_imp_shares
+}
+
+sum(resid) # sum of what is left
+new_imp_shares %>% colSums # imports allocated to sectors
+new_imp_shares %>% rowSums # ...by exporting country
+
+(dest_vec - (new_imp_shares %>% colSums())) %>% plot # flows left by importing sector
+(origin_vec - (new_imp_shares %>% rowSums())) %>% summary # flows left by exporting country 
+
+(dest_vec - (new_imp_shares %>% colSums())) %>% sum # sum of flows left by importing sector
+(origin_vec - (new_imp_shares %>% rowSums())) %>% sum # sum of flows left by exporting country 
+
+sum(resid) / sum(new_imp_shares) # what proportion is left?
+
+# redistribute the rest
+
+
+
+
+
+test <- originprop_vec[originprop_vec > 0] %>% 
+  log 
+test <- test + (abs(min(test)) * 1.1)
+
+rdirichlet(10, test) %>%
+  boxplot
+points(originprop_vec, col = "red", pch = 16)
+plot(originprop_vec)
+
+sum(rand)
+(rand * dest_vec[2]) %>% sum
+
+
+```
+
+
 
 
 
