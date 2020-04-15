@@ -22,14 +22,21 @@ source("./settings.R")
 source("./functions.R")
 
 path2exiobase <- "/home/simon/Documents/PhD_PROSET/data/EXIOBASE3"
-years <- 1995:2011
+years <- 2016
 
 
-ids_fd <- colnames_y[country == "DE" & fd_category %in% c("Households", "NPISH", "Government", "GFCF")]$id
-ids_fd <- colnames_y[fd_category %in% c("Households", "NPISH", "Government", "GFCF")]$id
+ids_fd <- colnames_y[country == "DE" & fd_category %in% c("Households","NPISH", 
+                                                          "Government", "GFCF")]$id
+ids_fd <- colnames_y[fd_category %in% c("Households", "NPISH", 
+                                        "Government", "GFCF")]$id
 ids_stressor <- stressor_names[grepl("CO2", stressor)]$id
-id_sector <- colnames_A_mat[country == "Germany" & grepl("Manufacture of motor vehicles", industry)]$id
+id_manuf <- Industry_classes[Class1 == "Manufacturing"]$Industry_index %>% 
+  unique
+ids_EU28 <- countries_class[WEO2017_short == "EU"]$Symbol1
+id_sector <- EB3_metadata$colnames163[country_code1 %in% ids_EU28 &
+                                        product163_id %in% id_manuf]$id
 
+years <- 2016
 ############################################################################## # 
 ##### load data #############################################################
 ############################################################################## # 
@@ -113,10 +120,17 @@ source("./functions.R")
 ############################################################################## # 
 ##### load data #############################################################
 ############################################################################## # 
+ids_stressor <- EB3_metadata$stressorsV3.6[grepl("CO2", stressor_name)]$id
+id_manuf <- EB3_metadata$pxp200[sector7 == "Manufacturing"]$id
+ids_EU28 <- EB3_metadata$regions[WEO2017_short == "EU"]$id
+id_sector <- EB3_metadata$colnames163[region_id %in% ids_EU28 &
+                                        product163_id %in% id_manuf]$id
+
+years <- 2016
 
 # 1) Calculate Sectoral footprints in a loop ---------------------------------
 data <- EB3_metadata$colnames200[, c("id", "country_name", "product200_name")]
-year <- 2016
+#year <- 2016
 for(year in years) {
   cat(year, "")
   # 1. load data
@@ -124,8 +138,11 @@ for(year in years) {
   S <- fread(file.path(ipath, "S.txt")) %>%
     .[ids_stressor,] %>% as.matrix %>% colSums(na.rm = TRUE) %>% 
     matrix(nrow = 1)# only CO2 emissions
+  # L <- fread(file.path(ipath, "L.txt"), select = id_sector) %>% 
+  #   unlist
   L <- fread(file.path(ipath, "L.txt"), select = id_sector) %>% 
-    unlist
+    as.matrix
+  
   Y <- fread(file.path(ipath, "Y.txt"), select = ids_fd) %>%
     as.matrix %>% rowSums
   x <- fread(file.path(ipath, "x.txt")) %>% unlist
@@ -133,9 +150,20 @@ for(year in years) {
   # 2. calculate emisions
   direct_em <- S[1, id_sector] * x[id_sector] # Si * xi
   # set diagonals to zero to avoid double counting
-  L[id_sector] <- 0
-  indirect_em <- S %*% diag(L * x[id_sector]) %>% as.numeric # S * L'i * xi
-  indirect_em[id_sector] <- direct_em
+  indirect_em <- lapply(1:length(id_sector), function(i) {
+    temp <- L[, i]
+    temp[id_sector[i]] <- 0
+    indirect_em <- S %*% diag(temp * x[id_sector[i]]) %>% 
+      as.numeric # S * L'i * xi
+  })
+  
+  # L[id_sector] <- 0
+  # dim(L)
+  # indirect_em <- S %*% diag(L * x[id_sector]) %>% as.numeric # S * L'i * xi
+  # indirect_em[id_sector] <- direct_em
+  
+  length(indirect_em[[1]])
+  
   
   # 3. bind together
   temp <- data.table("id" = 1:9800, "value" = indirect_em %>% as.numeric)
@@ -211,6 +239,129 @@ data[, sum(value), by = .(order, year)] %>%
   geom_area(aes(fill = order)) + 
   scale_fill_viridis_d() + 
   ylab("CO2 emissions [t]")
+
+
+
+# _________________----
+# with pxp200 for several sectors ---------
+
+############################################################################## # 
+##### settings #################################################################
+############################################################################## # 
+source("./settings.R")
+source("./functions.R")
+
+
+
+
+############################################################################## # 
+##### load data #############################################################
+############################################################################## # 
+ids_stressor <- EB3_metadata$stressorsV3.6[grepl("CO2", stressor_name)]$id
+ids_stressor <- EB3_metadata$stressorsV3.6[grepl("CO2|CH4|", stressor_name)]$id
+
+#ids_stressor <- 1
+id_manuf <- EB3_metadata$pxp200[sector7 == "Manufacturing"]$id
+ids_EU28 <- EB3_metadata$regions[WEO2017_short == "EU"]$id
+id_sector <- EB3_metadata$colnames163[region_id %in% ids_EU28 &
+                                        product163_id %in% id_manuf]$id
+id_sector2 <- EB3_metadata$colnames163[region_id %in% ids_EU28]$id
+
+years <- year <- 2016
+
+# 1) Calculate Sectoral footprints in a loop ---------------------------------
+data <- EB3_metadata$colnames200[, c("id", "country_name", "product200_name")]
+path2exiobase36 <- "/home/simon/Documents/PhD_PROSET/data/EXIOBASE3/V3.6"
+for(year in years) {
+  cat(year, "")
+  # 1. load data
+  ipath <- file.path(path2exiobase36, paste0("IOT_", year, "_pxp"))
+  E <- read_EB3_S(file.path(ipath, "satellite", "F.txt"))
+  dim(E)
+  dim(EB3_midpoints$matrix)
+  EB3_metadata$stressorsV3.6
+  %>% 
+    .[ids_stressor,] %>% as.matrix %>% colSums(na.rm = TRUE) %>% 
+    matrix(nrow = 1) # only CO2 emissions
+  sum(E) / 1E12 # in Billion Tonnes
+  L <- fread(file.path(ipath, "L.txt")) %>% 
+    as.matrix
+  Y <- read_EB3_Y(file.path(ipath, "Y.txt")) %>%
+    .[,ids_fd] %>% 
+    rowSums
+  #x <- fread(file.path(ipath, "x.txt")) %>% unlist
+  # 2. calculate emisions
+  x <- L %*% Y
+  x <- as.numeric(x)
+  xhat <- diag(1/x)
+  xhat[is.infinite(xhat)] <- 0
+  S <- E %*% xhat
+  
+  # EU manufacturing emissions
+  direct_em <- S[1, id_sector] * x[id_sector] # Si * xi
+  sum(direct_em) / 1E9 # mil t
+  # EU total emissons
+  direct_em2 <- S[1, id_sector2] * x[id_sector2] # Si * xi
+  sum(direct_em2) / 1E12 # should be: 3.5 Mt CO2eq
+  
+  
+  tot <- S %*% x %>% as.numeric
+  tot / 1E9 # should be: 4400 Mt CO2e
+  sum(direct_em) / 1E12 # should be: 877 Mt CO2eq
+  # set diagonals to zero to avoid double counting
+  indirect_em <- lapply(1:length(id_sector), function(i) {
+    temp <- L[, i]
+    temp[id_sector[i]] <- 0
+    indirect_em <- S %*% diag(temp * x[id_sector[i]]) %>% 
+      as.numeric # S * L'i * xi
+  })
+  
+  for(i in 1:length(id_sector)) {
+    indirect_em[[i]][id_sector[i]] <- direct_em[i]
+  }
+  indirect_em_mat <- do.call(cbind, indirect_em)
+  dim(indirect_em_mat)
+  # how much is from elect. related emissions: 
+  ids_elec <- EB3_metadata$ixi[grepl("Elect", sector7)]$id
+  ids_elec <- EB3_metadata$colnames163[product163_id %in% ids_elec]$id
+  
+  b_elec <- indirect_em_mat[ids_elec,] %>% sum
+  b_total <- indirect_em_mat %>% sum
+  b_direct <- sum(direct_em)
+  
+  b_elec / b_total
+  b_elec / b_direct
+  b_direct / 1E9 # kt
+  b_elec / 1E6
+  # 877000 kt industry ghg emissions europe
+  # 3. bind together
+  temp <- data.table("id" = 1:9800, "value" = indirect_em %>% as.numeric)
+  data <- merge(data, temp, by = "id")
+  setnames(data, "value", year %>% as.character)
+}
+
+34792.29 # kt
+35 #Mt
+((S %>% as.numeric) * x)[7433]
+3.627379 #kt
+2.266116
+151000 / 3628379000
+
+S %*% x
+7722124 #kt
+
+
+# 322 kt iron ore extraction
+# 2) Prepare data --------------------------------------------------------------
+
+data <- melt(data, id.vars = c("id", "country_name", "product200_name"), 
+             variable.name = "year")
+data[, "rank" := frankv(value, order = -1L), by = year]
+
+data[, year := year %>% as.character %>% as.integer]
+
+
+
 
 
 # _________________----

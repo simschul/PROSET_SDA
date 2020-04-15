@@ -175,11 +175,28 @@ sankeySPA <- function(data.list, iyear, irank, show.agg.flows = FALSE) {
 
 
 # 1. Basic IO functions --------------------------------------------------------
+
+# EXIOBASE: 
 read_EB3_A <- function(path) {
   data.table::fread(path, skip = 3, drop = c(1,2)) %>% 
     as.matrix  
 }
 
+read_EB3_Y <- function(path) {
+  data.table::fread(path, skip = 3, drop = c(1,2)) %>% 
+    as.matrix  
+}
+read_EB3_va <- function(path) {
+  fread(file.path(path), 
+        skip = 2, header = FALSE, drop = 1)[1:9] %>% 
+    as.matrix
+}
+
+read_EB3_S <- function(path) {
+  fread(file.path(path), 
+        skip = 25, header = FALSE, drop = 1) %>% 
+    as.matrix
+}
 calculate_x <- function(Z, Y, va, L) {
   if(!is.null(dim(Y))) Y <- apply(Y, 1, sum) # if Y is matrix
   if(missing(L)) {
@@ -199,6 +216,7 @@ calculate_x <- function(Z, Y, va, L) {
 calculate_A <- function(Z, x) {
   # calculate A-matrix
   x_hat <- diag(1/x)
+  x_hat[is.infinite(x_hat)] <- 0
   A <- Z %*% x_hat
   return(A)
 }
@@ -473,7 +491,6 @@ calc_colrow_cumsums <- function(S, A, Y, n) {
 }
 
 
-
 #' Title
 #'
 #' @param L_mat 
@@ -490,7 +507,7 @@ calc_footprint_sector <- function(L_mat, S_mat, y_vec, index,
                                   detailed = FALSE) {
   direct <- .calc.sector.fp.direct(S_mat = S_mat, L_mat = L_mat, 
                                    y_vec = y_vec, index = index)
-  x <- calculate_x(Y = Y, L = L)
+  x <- calculate_x(Y = y_vec, L = L_mat)
   indirect <- .calc.sector.fp.indirect(S_mat = S_mat, L_mat = L_mat, 
                                        x = x, index = index)
   if(detailed) {
@@ -828,119 +845,5 @@ mat2dt <- function(mat, exclude.zeros = FALSE, exclude.na = FALSE) {
 # 
 
 
-#' Title
-#'
-#' @param mat 
-#' @param threshold 
-#' @param maxpoints 
-#' @param cex 
-#' @param attributes 
-#' @param ... 
-#'
-#' @return
-#' @export
-#'
-#' @examples
-#' 
-
-IOvisualize <- function(mat, threshold, maxpoints = 1E4, 
-                        cex = "absolut", attributes, 
-                        colnames = NA, rownames = NA,  ...) {
-  # TODO: include color scales to visulize < and > 0
-  if (maxpoints > (ncol(mat) * nrow(mat))) {
-    min_threshold <- 0
-  } else {
-    suppressWarnings(min_threshold <- mat %>%
-                       abs %>% 
-                       fsort(., decreasing = TRUE, na.last = TRUE) %>%
-                       .[maxpoints])  
-  }
-  if (missing(threshold)) {
-    threshold <- min_threshold
-  } 
-  if (min_threshold > threshold) {
-    warning(paste0("maxpoints = ", maxpoints, " reached: ", 
-                   "threshold taken to ", min_threshold))
-    threshold <- min_threshold
-  }
-  
-  mat[mat < threshold & mat > -threshold] <- NA
-  
-  res <- mat %>% as.sparse.matrix 
-  if (!missing(attributes)) {
-    if (sum(c("row", "col") %in% colnames(attributes)) != 2) {
-      warning("attributes needs to have both arguments col and row!")
-    }
-    res <- merge(res, attributes[, -"col"], by = "row", 
-                 suffixes = c(".row", ".col")) %>% 
-      merge(., attributes[, -"row"], by = "col", 
-            suffixes = c(".row", ".col"))
-  }
-  
-  if (missing(colnames)) colnames <- colnames(mat)
-  if (missing(rownames)) rownames <- rownames(mat)
-  colnames <- data.table(col = 1:length(colnames), 
-                         col.names = colnames)
-  rownames <- data.table(row = 1:length(rownames), 
-                         row.names = rownames)
-  res <- merge(res, colnames, by = "col") %>% 
-    merge(., rownames, by = "row")
-  res <- res %>% 
-    .[, row := -row] %>% 
-    st_as_sf(coords = c("col", "row"), 
-             remove = FALSE) 
-  res$row <- -res$row
-  if (cex == "absolut") {
-    res[["abs_value"]] <- abs(res$value)
-    cex <- "abs_value"
-  } else if (cex == "increasing") {
-    cex <- "value"
-  } else if (cex == "decreasing") {
-    res[["dec_value"]] <- -(res$value)
-    cex <- "dec_value"
-  }
-  mapview::mapview(res, alpha = 0.3, lwd = 0, cex = cex, 
-          color = (viridis), zcol = "value", ...)
-}
-
-#' Title
-#'
-#' @param mat 
-#'
-#' @return
-#' @export
-#'
-#' @examples
-
-as.sparse.matrix <- function(mat) {
-  mat <- data.table::as.data.table(mat)
-  colnames(mat) <- paste0(1:ncol(mat))
-  mat <- mat[, row := 1:.N] 
-  mat <- data.table::melt(mat, id.vars = "row", na.rm = TRUE, 
-                     variable.name = "col") %>% 
-    .[, col := col %>% as.integer] %>% 
-    .[]
-  return(mat)
-}
-
-#' Title
-#'
-#' @param xy 
-#'
-#' @return
-#' @export
-#'
-#' @examples
-point2polygon <- function (xy) {
-  x <- c(xy[1]-1, xy[1])
-  y <- c(xy[2]-1, xy[2])
-  poly <- matrix(c(x[1],y[1],
-                   x[1],y[2],
-                   x[2],y[2],
-                   x[2],y[1],
-                   x[1],y[1]), 
-                 nrow = 5, byrow = TRUE)
-  return(st_polygon(list(poly)))
-}
 
 # End --------------------------------------------------------------------------

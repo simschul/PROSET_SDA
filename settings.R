@@ -18,6 +18,7 @@ library(R.oo)
 library(bit64)
 library(raster)
 library(sf)
+library(RhpcBLASctl)
 
 
 library(viridis)
@@ -39,6 +40,7 @@ path2plot <- file.path(path2rproj, "plots")
 path2temp_results <- "./temp_results"
 
 options("datatable.print.class" = TRUE)
+RhpcBLASctl::blas_set_num_threads(7)
 # Meta data --------------------------------------------------------------------
 EB3_metadata <- readRDS(file.path(path2exiobase, "EB3_metadata.RData"))
 EB3_concordance <- readRDS(file.path(path2exiobase, "EB3_concordance.RData"))
